@@ -68,7 +68,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
   private boolean             expertMode;
   private JSSCPort            jsscPort;
   private transient Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
-  private static final String mapKey = "AIzaSyDzXh4hVx28SMGSgXB83FIRvYwAp4Lzk38";
+  private static String       mapKey;
 
   {
     // Clear out any old preferences so any stored objects can be regenerated
@@ -80,6 +80,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         ex.printStackTrace(System.out);
       }
     }
+    mapKey = prefs.get("mapkey", "");
     fc.addChoosableFileFilter(new MyFileFilter("csv"));
   }
 
