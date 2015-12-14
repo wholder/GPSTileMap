@@ -1843,7 +1843,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
                   try {
                     String url = "http://maps.googleapis.com/maps/api/staticmap?center=" +
                                   GPSMap.format(cLat) + "," + GPSMap.format(cLon) + "&zoom=" + (zoom) +
-                                  "&size=512x512&sensor=false&maptype=satellite&key=" + mapKey;
+                                  "&size=512x512&sensor=false&maptype=satellite" + (mapKey != null ? "&key=" + mapKey : "");
                     tileCount++;
                     int percent = (int) (((double) tileCount / (double) totalTiles) * 99);
                     publish(percent);
