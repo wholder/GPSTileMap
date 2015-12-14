@@ -81,6 +81,14 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
     }
     mapKey = prefs.get("mapkey", "");
+    if (mapKey == null  || mapKey.isEmpty()) {
+      String key = JOptionPane.showInputDialog("Enter Map Key");
+      if (key != null  && !key.isEmpty()) {
+        prefs.put("mapkey", key);
+      } else {
+        System.exit(0);
+      }
+    }
     fc.addChoosableFileFilter(new MyFileFilter("csv"));
   }
 
@@ -1388,6 +1396,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
     // Add Options menu
     //
     optMenu = new JMenu("Options");
+    // Add Edit Map Key item
+    JMenuItem editKey = new JMenuItem("Edit Map Key");
+    editKey.addActionListener(ev -> {
+      String key = JOptionPane.showInputDialog("Enter Map Key", prefs.get("mapkey", ""));
+      if (key != null  && !key.isEmpty()) {
+        prefs.put("mapkey", key);
+      }
+    });
+    optMenu.add(editKey);
     // Add Show Obstacles item
     JCheckBoxMenuItem markers = new JCheckBoxMenuItem("Show Markers", prefs.getBoolean("markers.on", false));
     markers.addActionListener(ev -> {
