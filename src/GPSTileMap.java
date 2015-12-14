@@ -136,14 +136,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     public MyToolBar () {
       super("Still draggable");
-      add(getButton("arrow",  "arrow.png",      "Move",         "Move Marker"));
-      add(getButton("hand",   "hand.png",       "Drag",         "Drag Map", true));
-      add(getButton("cross",  "crosshair.png",  "Crosshair",    "GPS Coords"));
-      add(getButton("tape",   "tape.png",       "Tape",         "Measure Distancee"));
-      add(getButton("pin",    "pin.png",        "Pin",          "Set Waypoint"));
-      add(getButton("barrel", "barrel.png",     "Barrel",       "Place Barrel"));
-      add(getButton("trash",  "trash.gif",      "Delete",       "Delete Waypoint"));
-      add(getButton("gps",    "gpsRef.png",     "GPS",           "GPS Reference"));
+      add(getButton("arrow",    "arrow.png",      "Move",         "Move Marker"));
+      add(getButton("hand",     "hand.png",       "Drag",         "Drag Map", true));
+      add(getButton("cross",    "crosshair.png",  "Crosshair",    "GPS Coords"));
+      add(getButton("tape",     "tape.png",       "Tape",         "Measure Distancee"));
+      add(getButton("pin",      "pin.png",        "Pin",          "Set Waypoint"));
+      add(getButton("barrel",   "barrel.png",     "Barrel",       "Place Barrel"));
+      add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
+      add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
+      add(getButton("gps",      "gpsRef.png",     "GPS",           "GPS Reference"));
 /*
       add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
       add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
@@ -179,6 +180,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     public void actionPerformed (ActionEvent ev) {
       state = ev.getActionCommand();
+      if ("stanchion".equals(state)) {
+        int last = gpsMap.markSet.markers.size() - 1;
+        if (last > 0 && gpsMap.markSet.markers.get(last).type == GPSMap.MarkerType.POLY) {
+          gpsMap.markSet.markers.add(new GPSMap.Marker(false));
+        }
+      }
       if (gpsMap != null)
         gpsMap.setTool(state);
     }
@@ -390,7 +397,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         markers.add(new Marker(MarkerType.POLY,   40.0707559, -105.2297179, 12, Color.YELLOW));   // Cormer 2
         markers.add(new Marker(MarkerType.POLY,   40.0709769, -105.2291910, 12, Color.YELLOW));   // Cormer 3
         markers.add(new Marker(MarkerType.POLY,   40.0713319, -105.2294660, 12, Color.YELLOW));   // Cormer 4
-        markers.add(new Marker());
+        markers.add(new Marker(true));
 
         markers.add(new Marker(MarkerType.HOOP,   40.0708299, -105.2295309, 60, Color.GREEN, 60));// Hoop
         markers.add(new Marker(MarkerType.RECT,   40.0710810, -105.2291989, 45, Color.BLUE, 60)); // Ramp
@@ -404,7 +411,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           String line = tok.nextToken();
           String[] items = line.split(",");
           if (items.length == 1) {
-            markers.add(new Marker());
+            markers.add(new Marker(true));
           } else if (items.length >= 5) {
             MarkerType type = MarkerType.valueOf(items[0].trim());
             double lat = Double.valueOf(items[1].trim());
@@ -427,7 +434,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           PrintWriter pOut = new PrintWriter(fOut);
           for (Marker mrk : markers) {
             pOut.print(mrk.type.toString());
-            if (mrk.type != MarkerType.POLYEND) {
+            if (mrk.type != MarkerType.POLYCLOSE) {
               pOut.print(",");
               pOut.print(mrk.latLon.lat);
               pOut.print(",");
@@ -493,7 +500,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     }
 
     public enum MarkerType {
-      CIRCLE, RECT, HOOP, POLY, POLYEND, GPSREF
+      CIRCLE, RECT, HOOP, POLY, POLYCLOSE, POLYEND, GPSREF
     }
 
     public static class Marker extends Drawable implements Serializable {
@@ -515,9 +522,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
         hasRotation = true;
       }
 
-      public Marker () {
+      public Marker (boolean closed) {
         super(0, 0, 0);
-        type = MarkerType.POLYEND;
+        type = closed ? MarkerType.POLYCLOSE : MarkerType.POLYEND;
       }
 
       protected Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Object[] ret) {
@@ -557,8 +564,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
             }
             return new Object[] {color, new Point(loc.x, loc.y)};
             }
-          case POLYEND: {
-            // Note: ends definition of polygon and draws closing segment
+          case POLYCLOSE: {
+            // Note: ends definition of Stanchion chain and draws closing segment
             if (ret != null && ret.length == 3) {
               g2.setColor((Color) ret[0]);
               Point lp1 = (Point) ret[1];
@@ -566,6 +573,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
               g2.drawLine(lp1.x, lp1.y, lp2.x, lp2.y);
             }
             } break;
+          case POLYEND:
+            // Marks end of Stanchion chain without closing segment
+            break;
           case GPSREF: {
             // Diameter of icon does not scale with zoom
             dia = 20;
@@ -758,6 +768,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return null;
     }
 
+    public boolean touches (Drawable mrk, int x, int y) {
+      return mrk != null && mrk.selects(this, x, y, zoom);
+    }
+
     private void setPosition (Drawable mrk, int x, int y) {
       mrk.latLon = getMapLatLon(x, y);
     }
@@ -881,6 +895,30 @@ public class GPSTileMap extends JFrame implements ActionListener {
             LatLon loc = getMapLatLon(mx, my);
             markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            repaint();
+          } else {
+            toolInfo.setText("Map not loaded");
+          }
+        } else if ("stanchion".equals(tool)) {
+          int my = event.getY();
+          int mx = event.getX();
+          if (mapSet != null) {
+            Marker first = null;
+            // Find first Stanchion in chain
+            for (int ii = markSet.markers.size() - 1; ii >= 0; ii--) {
+              Marker tmp = markSet.markers.get(ii);
+              if (tmp.type == MarkerType.POLY)
+                first = tmp;
+              else
+                break;
+            }
+            if (touches(first, event.getX(), event.getY())) {
+              markSet.markers.add(new Marker(true));
+            } else {
+              LatLon loc = getMapLatLon(mx, my);
+              markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
+              toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            }
             repaint();
           } else {
             toolInfo.setText("Map not loaded");
