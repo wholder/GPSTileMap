@@ -85,6 +85,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       String key = JOptionPane.showInputDialog("Enter Map Key");
       if (key != null  && !key.isEmpty()) {
         prefs.put("mapkey", key);
+        mapKey = key;
       } else {
         System.exit(0);
       }
