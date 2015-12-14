@@ -1401,7 +1401,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     JMenuItem editKey = new JMenuItem("Edit Map Key");
     editKey.addActionListener(ev -> {
       String key = JOptionPane.showInputDialog("Enter Map Key", prefs.get("mapkey", ""));
-      if (key != null  && !key.isEmpty()) {
+      if (key != null && !key.isEmpty()) {
         prefs.put("mapkey", key);
       }
     });
@@ -1676,7 +1676,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
             ex.printStackTrace(System.out);
           }
         }
-        gpsMap.markSet.save();
+        if (gpsMap.markSet != null) {
+          gpsMap.markSet.save();
+        }
         try {
           prefs.flush();
         } catch (BackingStoreException ex) {
