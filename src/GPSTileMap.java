@@ -146,6 +146,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("hoop",     "hoop.png",       "Hoop",         "Place Hoop"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
       add(getButton("gps",      "gpsRef.png",     "GPS",          "GPS Reference"));
+      add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
 /*
       add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
       add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
@@ -217,6 +218,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private MarkSet               markSet;
     private transient Image       offScr;
     private Dimension             win, lastWin;
+    private boolean               screenRotate;   // rotate 180 if true
     private JTextField            toolInfo;
     private int                   sX, sY, pX, pY, offX, offY;
     private int                   zoom;
@@ -799,14 +801,21 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return val != null  &&  val.length() > 0;
     }
 
+    public Point rotate (Point pos) {
+      if (screenRotate) {
+        pos.x = win.width - pos.x;
+        pos.y = win.height - pos.y;
+      }
+      return pos;
+    }
+
     class MyMouseAdapter extends MouseAdapter  {
       public void mousePressed (MouseEvent event) {
-        int mx = event.getX();
-        int my = event.getY();
+        Point mp = rotate(new Point(event.getX(), event.getY()));
         boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)  ||  ("pin".equals(tool) && shiftDown)  ||  ("gps".equals(tool) && shiftDown)) {
           if (shiftDown) {
-            Drawable mrk = findMarker(mx, my);
+            Drawable mrk = findMarker(mp.x, mp.y);
             if (mrk != null  &&  mrk instanceof Waypoint) {
               Waypoint way = (Waypoint) mrk;
               int num = markSet.waypoints.indexOf(way) + 1;
@@ -870,26 +879,26 @@ public class GPSTileMap extends JFrame implements ActionListener {
               }
             }
           } else {
-            Drawable mrk = findMarker(mx, my);
+            Drawable mrk = findMarker(mp.x, mp.y);
             if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) || mrk instanceof GPSReference) {
               selected = mrk;
             }
           }
         } else if (shiftDown || "hand".equals(tool)) {
-          sX = mx;
-          sY = my;
+          sX = mp.x;
+          sY = mp.y;
           pX = offX;
           pY = offY;
         } else if ("cross".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
           } else {
             toolInfo.setText("Map not loaded");
           }
         } else if ("pin".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             repaint();
@@ -898,7 +907,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("barrel".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             repaint();
@@ -907,7 +916,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("ramp".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             repaint();
@@ -916,7 +925,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("hoop".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             repaint();
@@ -934,10 +943,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
               else
                 break;
             }
-            if (touches(first, mx, my)) {
+            if (touches(first, mp.x, mp.y)) {
               markSet.markers.add(new Marker(true));
             } else {
-              LatLon loc = getMapLatLon(mx, my);
+              LatLon loc = getMapLatLon(mp.x, mp.y);
               markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
               toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             }
@@ -947,7 +956,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("gps".equals(tool)) {
           if (mapSet != null) {
-            LatLon loc = getMapLatLon(mx, my);
+            LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.gpsReference = new GPSReference(loc.lat, loc.lon);
             repaint();
           } else {
@@ -955,7 +964,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("trash".equals(tool)) {
           if (mapSet != null) {
-            Drawable mkr = findMarker(mx, my);
+            Drawable mkr = findMarker(mp.x, mp.y);
             if (mkr instanceof Waypoint) {
               markSet.waypoints.remove(mkr);
               repaint();
@@ -974,7 +983,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("tape".equals(tool)) {
           if (mapSet != null) {
             if (tapePressed) {
-              LatLon loc = getMapLatLon(mx, my);
+              LatLon loc = getMapLatLon(mp.x, mp.y);
               double lat1 = GPSMap.degreesToRadians(loc.lat);
               double lon1 = GPSMap.degreesToRadians(loc.lon);
               double lat2 = GPSMap.degreesToRadians(tapeLoc.lat);
@@ -985,7 +994,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
               toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
               tapePressed = false;
             } else {
-              tapeLoc = getMapLatLon(mx, my);
+              tapeLoc = getMapLatLon(mp.x, mp.y);
               toolInfo.setText("Select 2nd point");
               tapePressed = true;
             }
@@ -1011,22 +1020,21 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     class MyMouseMotionAdapter extends MouseMotionAdapter  {
       public void mouseDragged (MouseEvent event) {
-        int mx = event.getX();
-        int my = event.getY();
+        Point mp = rotate(new Point(event.getX(), event.getY()));
         boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)) {
           if (selected != null) {
             if (shiftDown && selected instanceof Marker) {
-              ((Marker) selected).doRotate(gpsTileMap.gpsMap, mx, my);
+              ((Marker) selected).doRotate(gpsTileMap.gpsMap, mp.x, mp.y);
             } else {
-              setPosition(selected, mx, my);
+              setPosition(selected, mp.x, mp.y);
             }
             repaint();
           }
         } else if (shiftDown || "hand".equals(tool)) {
           win = getSize();
-          int dX = sX - mx;
-          int dY = sY - my;
+          int dX = sX - mp.x;
+          int dY = sY - mp.y;
           int base = zoom - BaseZoom;
           offX = Math.max(0, Math.min(zoomLevels[base].width - win.width, pX + dX));
           offY = Math.max(0, Math.min(zoomLevels[base].height - win.height, pY + dY));
@@ -1135,6 +1143,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       setTool("hand");
       markSet = MarkSet.load(mapSet.name);
       initSettiings();
+      screenRotate = prefs.getBoolean("rotate.on", true);
       showMarkers = prefs.getBoolean("markers.on", true);
       moveMarkers = prefs.getBoolean("move_markers.on", false);
       showNumbers = prefs.getBoolean("numbers.on", false);
@@ -1156,10 +1165,13 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
       lastWin = win;
       Graphics2D g2 = (Graphics2D) offScr.getGraphics();
+      if (screenRotate) {
+        g2.rotate(Math.toRadians(180));
+        g2.translate(-win.width, -win.height);
+      }
       g2.setBackground(getBackground());
       if (mapSet != null) {
         g2.setRenderingHints(new RenderingHints(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON));
-        // drawImage(Image img, int dx1, int dy1, int dx2, int dy2, int sx1, int sy1, int sx2, int sy2, ImageObserver observer);
         g2.drawImage(mapSet.getMap(zoom), 0, 0, win.width, win.height, offX, offY, offX + win.width, offY + win.height, this);
         if (markSet != null) {
           if (showMarkers) {
@@ -1465,6 +1477,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
     });
     optMenu.add(editKey);
+    // Add Rotate Map item
+    JCheckBoxMenuItem rotation = new JCheckBoxMenuItem("Rotate Map", prefs.getBoolean("rotate.on", false));
+    rotation.addActionListener(ev -> {
+      boolean selected = ((AbstractButton) ev.getSource()).getModel().isSelected();
+      gpsMap.screenRotate = selected;
+      gpsMap.repaint();
+      prefs.putBoolean("rotate.on", selected);
+    });
+    optMenu.add(rotation);
     // Add Show Obstacles item
     JCheckBoxMenuItem markers = new JCheckBoxMenuItem("Show Markers", prefs.getBoolean("markers.on", false));
     markers.addActionListener(ev -> {
