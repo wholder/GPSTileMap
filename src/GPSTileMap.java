@@ -142,6 +142,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("tape",     "tape.png",       "Tape",         "Measure Distancee"));
       add(getButton("pin",      "pin.png",        "Pin",          "Set Waypoint"));
       add(getButton("barrel",   "barrel.png",     "Barrel",       "Place Barrel"));
+      add(getButton("ramp",     "ramp.png",       "Ramp",         "Place Ramp"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
       add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
       add(getButton("gps",      "gpsRef.png",     "GPS",           "GPS Reference"));
@@ -506,7 +507,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     public static class Marker extends Drawable implements Serializable {
       private static final long  serialVersionUID = 7626575480447322227L;
       private MarkerType  type;
-      private int         rotation;
+      private int         rotation;   // degrees (0-359)
       protected Color     color;
       private boolean     hasRotation;
 
@@ -525,6 +526,13 @@ public class GPSTileMap extends JFrame implements ActionListener {
       public Marker (boolean closed) {
         super(0, 0, 0);
         type = closed ? MarkerType.POLYCLOSE : MarkerType.POLYEND;
+      }
+
+      public void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
+        if (hasRotation) {
+          Point loc = gpsMap.getMapLoc(latLon);
+          rotation = (int) Math.toDegrees(360 - Math.atan2(x - loc.x, y - loc.y));
+        }
       }
 
       protected Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Object[] ret) {
@@ -791,10 +799,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     class MyMouseAdapter extends MouseAdapter  {
       public void mousePressed (MouseEvent event) {
+        int mx = event.getX();
+        int my = event.getY();
         boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)  ||  ("pin".equals(tool) && shiftDown)  ||  ("gps".equals(tool) && shiftDown)) {
           if (shiftDown) {
-            Drawable mrk = findMarker(event.getX(), event.getY());
+            Drawable mrk = findMarker(mx, my);
             if (mrk != null  &&  mrk instanceof Waypoint) {
               Waypoint way = (Waypoint) mrk;
               int num = markSet.waypoints.indexOf(way) + 1;
@@ -858,19 +868,17 @@ public class GPSTileMap extends JFrame implements ActionListener {
               }
             }
           } else {
-            Drawable mrk = findMarker(event.getX(), event.getY());
+            Drawable mrk = findMarker(mx, my);
             if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) || mrk instanceof GPSReference) {
               selected = mrk;
             }
           }
         } else if (shiftDown || "hand".equals(tool)) {
-          sX = event.getX();
-          sY = event.getY();
+          sX = mx;
+          sY = my;
           pX = offX;
           pY = offY;
         } else if ("cross".equals(tool)) {
-          int my = event.getY();
-          int mx = event.getX();
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mx, my);
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
@@ -878,8 +886,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
             toolInfo.setText("Map not loaded");
           }
         } else if ("pin".equals(tool)) {
-          int my = event.getY();
-          int mx = event.getX();
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mx, my);
             markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
@@ -889,8 +895,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
             toolInfo.setText("Map not loaded");
           }
         } else if ("barrel".equals(tool)) {
-          int my = event.getY();
-          int mx = event.getX();
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mx, my);
             markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
@@ -899,9 +903,16 @@ public class GPSTileMap extends JFrame implements ActionListener {
           } else {
             toolInfo.setText("Map not loaded");
           }
+        } else if ("ramp".equals(tool)) {
+          if (mapSet != null) {
+            LatLon loc = getMapLatLon(mx, my);
+            markSet.markers.add(new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60));
+            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            repaint();
+          } else {
+            toolInfo.setText("Map not loaded");
+          }
         } else if ("stanchion".equals(tool)) {
-          int my = event.getY();
-          int mx = event.getX();
           if (mapSet != null) {
             Marker first = null;
             // Find first Stanchion in chain
@@ -912,7 +923,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
               else
                 break;
             }
-            if (touches(first, event.getX(), event.getY())) {
+            if (touches(first, mx, my)) {
               markSet.markers.add(new Marker(true));
             } else {
               LatLon loc = getMapLatLon(mx, my);
@@ -924,8 +935,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
             toolInfo.setText("Map not loaded");
           }
         } else if ("gps".equals(tool)) {
-          int my = event.getY();
-          int mx = event.getX();
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mx, my);
             markSet.gpsReference = new GPSReference(loc.lat, loc.lon);
@@ -935,7 +944,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("trash".equals(tool)) {
           if (mapSet != null) {
-            Drawable mkr = findMarker(event.getX(), event.getY());
+            Drawable mkr = findMarker(mx, my);
             if (mkr instanceof Waypoint) {
               markSet.waypoints.remove(mkr);
               repaint();
@@ -954,7 +963,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("tape".equals(tool)) {
           if (mapSet != null) {
             if (tapePressed) {
-              LatLon loc = getMapLatLon(event.getY(), event.getX());
+              LatLon loc = getMapLatLon(mx, my);
               double lat1 = GPSMap.degreesToRadians(loc.lat);
               double lon1 = GPSMap.degreesToRadians(loc.lon);
               double lat2 = GPSMap.degreesToRadians(tapeLoc.lat);
@@ -965,7 +974,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
               toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
               tapePressed = false;
             } else {
-              tapeLoc = getMapLatLon(event.getY(), event.getX());
+              tapeLoc = getMapLatLon(mx, my);
               toolInfo.setText("Select 2nd point");
               tapePressed = true;
             }
@@ -978,10 +987,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       public void mouseReleased (MouseEvent event) {
         boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)) {
-          if (!shiftDown && selected != null) {
-            int x = event.getX();
-            int y = event.getY();
-            setPosition(selected, x, y);
+          if (selected != null) {
             repaint();
             selected = null;
           }
@@ -994,18 +1000,22 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     class MyMouseMotionAdapter extends MouseMotionAdapter  {
       public void mouseDragged (MouseEvent event) {
+        int mx = event.getX();
+        int my = event.getY();
         boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)) {
-          if (!shiftDown && selected != null) {
-            int x = event.getX();
-            int y = event.getY();
-            setPosition(selected, x, y);
+          if (selected != null) {
+            if (shiftDown && selected instanceof Marker) {
+              ((Marker) selected).doRotate(gpsTileMap.gpsMap, mx, my);
+            } else {
+              setPosition(selected, mx, my);
+            }
             repaint();
           }
         } else if (shiftDown || "hand".equals(tool)) {
           win = getSize();
-          int dX = sX - event.getX();
-          int dY = sY - event.getY();
+          int dX = sX - mx;
+          int dY = sY - my;
           int base = zoom - BaseZoom;
           offX = Math.max(0, Math.min(zoomLevels[base].width - win.width, pX + dX));
           offY = Math.max(0, Math.min(zoomLevels[base].height - win.height, pY + dY));
