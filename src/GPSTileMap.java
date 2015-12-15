@@ -145,8 +145,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("ramp",     "ramp.png",       "Ramp",         "Place Ramp"));
       add(getButton("hoop",     "hoop.png",       "Hoop",         "Place Hoop"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
-      add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
-      add(getButton("gps",      "gpsRef.png",     "GPS",           "GPS Reference"));
+      add(getButton("gps",      "gpsRef.png",     "GPS",          "GPS Reference"));
 /*
       add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
       add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
