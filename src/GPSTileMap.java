@@ -143,6 +143,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("pin",      "pin.png",        "Pin",          "Set Waypoint"));
       add(getButton("barrel",   "barrel.png",     "Barrel",       "Place Barrel"));
       add(getButton("ramp",     "ramp.png",       "Ramp",         "Place Ramp"));
+      add(getButton("hoop",     "hoop.png",       "Hoop",         "Place Hoop"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
       add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
       add(getButton("gps",      "gpsRef.png",     "GPS",           "GPS Reference"));
@@ -776,6 +777,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return null;
     }
 
+    // Utility methods
+
     public boolean touches (Drawable mrk, int x, int y) {
       return mrk != null && mrk.selects(this, x, y, zoom);
     }
@@ -793,7 +796,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
     }
 
-    private boolean notEmpty (String val) {
+    private static boolean notEmpty (String val) {
       return val != null  &&  val.length() > 0;
     }
 
@@ -907,6 +910,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mx, my);
             markSet.markers.add(new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60));
+            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            repaint();
+          } else {
+            toolInfo.setText("Map not loaded");
+          }
+        } else if ("hoop".equals(tool)) {
+          if (mapSet != null) {
+            LatLon loc = getMapLatLon(mx, my);
+            markSet.markers.add(new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60));
             toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
             repaint();
           } else {
