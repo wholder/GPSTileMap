@@ -1,3 +1,5 @@
+import d3.env.TSAGeoMag;
+
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.Timer;
@@ -69,6 +71,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
   private JSSCPort            jsscPort;
   private transient Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
   private static String       mapKey;
+  private static TSAGeoMag    magModel;
 
   {
     // Clear out any old preferences so any stored objects can be regenerated
@@ -91,6 +94,11 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
     }
     fc.addChoosableFileFilter(new MyFileFilter("csv"));
+    try {
+      magModel = new TSAGeoMag();
+    } catch (Exception ex) {
+      ex.printStackTrace(System.out);
+    }
   }
 
   public static class LatLon implements Serializable {
@@ -258,14 +266,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private static class MapSet implements Serializable {
       private static final long   serialVersionUID = 6723304208987345944L;
       private String              name;
-      private double              declination;
       private int[]               pixLat = new int[3], pixLon = new int[3], ulLat = new int[3], ulLon = new int[3];
       private transient Image[]   maps = new Image[3];
       private byte[]              imgData;
+      private double              lat, lon;
 
-      public MapSet (String name, double lat, double lon, double declination) {
+      public MapSet (String name, double lat, double lon) {
         this.name = name;
-        this.declination = declination;
+        this.lat = lat;
+        this.lon = lon;
         // Setup offsets for different zoom levels
         for (int ii = 0; ii < 3; ii++) {
           pixLat[ii] = GPSMap.latToPixelY(lat, ii + BaseZoom);
@@ -277,7 +286,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
 
       public double getDeclination () {
-        return declination;
+        return magModel.getDeclination(lat, lon, 2015, 0);
       }
 
       public static MapSet loadMapSet (String name) throws IOException, ClassNotFoundException {
@@ -1478,7 +1487,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     });
     optMenu.add(editKey);
     // Add Rotate Map item
-    JCheckBoxMenuItem rotation = new JCheckBoxMenuItem("Rotate Map", prefs.getBoolean("rotate.on", false));
+    JCheckBoxMenuItem rotation = new JCheckBoxMenuItem("Rotate Map 180", prefs.getBoolean("rotate.on", false));
     rotation.addActionListener(ev -> {
       boolean selected = ((AbstractButton) ev.getSource()).getModel().isSelected();
       gpsMap.screenRotate = selected;
@@ -1901,10 +1910,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
       } else if ("Create Map".equals(cmd)) {
         JTextField lat = new JTextField();
         JTextField lon = new JTextField();
-        JTextField dec = new JTextField();
-        Object[][] message = {{"Latitude:", lat}, {"Longitude:", lon}, {"Declination:", dec}, {"Map Name:"}};
+        Object[][] message = {{"Latitude:", lat}, {"Longitude:", lon}, {"Map Name:"}};
         String name = JOptionPane.showInputDialog(null, message, "Add New", JOptionPane.QUESTION_MESSAGE);
-        if (notEmpty(name)  &&  notEmpty(lat.getText())  &&  notEmpty(lon.getText())  &&  notEmpty(dec.getText())) {
+        if (notEmpty(name)  &&  notEmpty(lat.getText())  &&  notEmpty(lon.getText())) {
           ProgressMonitor pbar = new ProgressMonitor(gpsMap, "Downloading Map Image...", null, 0, 100);
           pbar.setMillisToPopup(10);
           SwingWorker<GPSMap.MapSet, Integer> worker = new SwingWorker<GPSMap.MapSet, Integer>() {
@@ -1914,7 +1922,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
               int mapHeight = GPSMap.zoomLevels[2].height;
               int tileSize = GPSMap.imgTileSize;
               int zoom = GPSMap.MaxZoom;
-              GPSMap.MapSet mapSet = new GPSMap.MapSet(name, toDouble(lat.getText()), toDouble(lon.getText()), toDouble(dec.getText()));
+              GPSMap.MapSet mapSet = new GPSMap.MapSet(name, toDouble(lat.getText()), toDouble(lon.getText()));
               // Build Fully Zoomed Map image from Google Static Maps image tiles (other built by scaling down this image)
               int totalTiles = (mapWidth / tileSize) * (mapHeight / tileSize);
               int tileCount = 0;
