@@ -51,6 +51,7 @@ import java.util.prefs.Preferences;
   */
 
 public class GPSTileMap extends JFrame implements ActionListener {
+  private static DecimalFormat declinationFmt = new DecimalFormat("#.#");
   private static char[]       hexVals = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
   private static int          OPEN_KEY  = KeyEvent.VK_O;
   private static int          CREATE_KEY  = KeyEvent.VK_C;
@@ -286,7 +287,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
 
       public double getDeclination () {
-        return magModel.getDeclination(lat, lon, 2015, 0);
+        if (magModel != null)
+          return magModel.getDeclination(lat, lon, 2015, 0);
+        return 0;
       }
 
       public static MapSet loadMapSet (String name) throws IOException, ClassNotFoundException {
@@ -308,7 +311,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         }
       }
 
-      // Compress images in maps[] to PNG format temporarily saved to imgData[] then serialize to output stream
+      // Compress images in maps[] to PNG formatLatLon temporarily saved to imgData[] then serialize to output stream
       private void writeObject (ObjectOutputStream out) throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         ImageIO.write((BufferedImage) maps[2], "png", bout);
@@ -472,9 +475,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
       private String getCsvCoords (Settings settings) {
         StringBuilder buf = new StringBuilder();
         for (Waypoint way : waypoints) {
-          buf.append(format(way.latLon.lat));
+          buf.append(formatLatLon(way.latLon.lat));
           buf.append(",");
-          buf.append(format(way.latLon.lon));
+          buf.append(formatLatLon(way.latLon.lon));
           buf.append(",");
           //buf.append(settings.getCode(way.sel));
           int tmp = settings.getCode(way.sel) & 0x0F;
@@ -880,8 +883,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
               if (notEmpty(latTxt)  &&  notEmpty(lonTxt)) {
                 // Save coordinates to GPS Reference
                 markSet.gpsReference.setLoc(toDouble(latTxt), toDouble(lonTxt));
-                toolInfo.setText("dLat: " + format(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
-                               ", dLon: " + format(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
+                toolInfo.setText("dLat: " + formatLatLon(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
+                               ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
                 repaint();
               } else if (lonTxt != null) {
                 JOptionPane.showMessageDialog(null, "Must provide lat and lon values");
@@ -901,7 +904,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("cross".equals(tool)) {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
-            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
           } else {
             toolInfo.setText("Map not loaded");
           }
@@ -909,7 +912,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
-            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
             toolInfo.setText("Map not loaded");
@@ -918,7 +921,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
-            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
             toolInfo.setText("Map not loaded");
@@ -927,7 +930,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60));
-            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
             toolInfo.setText("Map not loaded");
@@ -936,7 +939,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
             markSet.markers.add(new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60));
-            toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
             toolInfo.setText("Map not loaded");
@@ -957,7 +960,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
             } else {
               LatLon loc = getMapLatLon(mp.x, mp.y);
               markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
-              toolInfo.setText(format(loc.lat) + ", " + format(loc.lon));
+              toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             }
             repaint();
           } else {
@@ -1273,7 +1276,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return buf.toString();
     }
 
-    private static String format (double val) {
+    private static String formatLatLon (double val) {
       return latLonFmt.format(val);
     }
 
@@ -1422,6 +1425,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       // Load Map
       try {
         gpsMap.loadMap(map);
+        toolInfo.setText("Declination: " + declinationFmt.format(gpsMap.mapSet.getDeclination()) + " degrees");
       } catch (Exception ex) {
         prefs.remove("default.map");
       }
@@ -1933,7 +1937,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
                   double cLon = GPSMap.pixelXToLon(mapSet.pixLon[2] + xx + 256 - mapWidth / 2, zoom);
                   try {
                     String url = "http://maps.googleapis.com/maps/api/staticmap?center=" +
-                                  GPSMap.format(cLat) + "," + GPSMap.format(cLon) + "&zoom=" + (zoom) +
+                                  GPSMap.formatLatLon(cLat) + "," + GPSMap.formatLatLon(cLon) + "&zoom=" + (zoom) +
                                   "&size=512x512&sensor=false&maptype=satellite" + (mapKey != null ? "&key=" + mapKey : "");
                     tileCount++;
                     int percent = (int) (((double) tileCount / (double) totalTiles) * 99);
