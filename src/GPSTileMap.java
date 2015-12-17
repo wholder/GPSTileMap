@@ -18,8 +18,9 @@ import java.util.List;
 import java.util.prefs.BackingStoreException;
 import java.util.prefs.Preferences;
  /*
-  *  AVC  40.071000, -105.229500 declination 8.82
-  *  Erma 32.919083, -117.114692 declination 11.97
+  *  AVC      40.071000, -105.229500
+  *  Erma     32.919083, -117.114692
+  *  Sparkfun 40.090860, -105.185759
   *
   *
   * Note: Ramp dimensions 45" x 45" x 8"
@@ -98,7 +99,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     try {
       magModel = new TSAGeoMag();
     } catch (Exception ex) {
-      ex.printStackTrace(System.out);
+      showErrorDialog("Unable to load WMM.COF resource file.  Magnetic declination will not be available.");
     }
   }
 
@@ -287,8 +288,13 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
 
       public double getDeclination () {
-        if (magModel != null)
-          return magModel.getDeclination(lat, lon, 2015, 0);
+        if (magModel != null) {
+          Calendar cal = Calendar.getInstance();
+          int year = cal.get(Calendar.YEAR);
+          int doy = cal.get(Calendar.DAY_OF_YEAR);
+          double fracYear = (double) year + ((double) doy / 356.0);
+          return magModel.getDeclination(lat, lon, fracYear, 0);
+        }
         return 0;
       }
 
@@ -1821,6 +1827,26 @@ public class GPSTileMap extends JFrame implements ActionListener {
     return buf.toString();
   }
 
+  /*
+   *  Bump Code
+   *
+   *   Verbs: STOP, WAIT <t>, REVERSE <t>, FORWARD <t>, TURN <d>, RESUME
+   *
+   *   Where <t> is time in seconds (down to 10ths) and <d> is integer degrees where 0 is forward,
+   *   positive values turn to right and negative values turn to left (assumes driving forward)
+   *
+   *   Example:
+   *     STOP
+   *     WAIT 1
+   *     STEER 0
+   *     REVERSE 1
+   *     TURN 10
+   *     FORWARD 1
+   *     STEER -10
+   *     FORWARD 1
+   *     STEER 0
+   *     RESUME
+   */
 
   private String[] compileBumpCode () {
     String code = prefs.get("bump.code", "");
