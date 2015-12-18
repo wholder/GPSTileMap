@@ -64,7 +64,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
   private JMenu               fileMenu;
   private JMenu               zoomMenu;
   private JMenu               optMenu;
-  private JMenu               coordMenu;
+  private JMenu               waypointMenu;
   private JMenu               settingsMenu;
   private JMenu               bumpMenu;
   private JFileChooser        fc = new JFileChooser();
@@ -150,6 +150,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("hand",     "hand.png",       "Drag",         "Drag Map", true));
       add(getButton("cross",    "crosshair.png",  "Crosshair",    "GPS Coords"));
       add(getButton("tape",     "tape.png",       "Tape",         "Measure Distancee"));
+      add(getButton("magnifier","magnifier.gif",  "Edit",         "Edit Waypoint or GPS Ref"));
       add(getButton("pin",      "pin.png",        "Pin",          "Set Waypoint"));
       add(getButton("barrel",   "barrel.png",     "Barrel",       "Place Barrel"));
       add(getButton("ramp",     "ramp.png",       "Ramp",         "Place Ramp"));
@@ -160,12 +161,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
 /*
       add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
       add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
-      add(getButton("b1",     "b1.gif",         "AltName",      "Tooltip"));
-      add(getButton("b4",     "b4.gif",         "AltName",      "Tooltip"));
-      add(getButton("b5",     "b5.gif",         "AltName",      "Tooltip"));
       add(getButton("b6",     "notes.gif",      "AltName",      "Tooltip"));
-      add(getButton("b7",     "b7.gif",         "AltName",      "Tooltip"));
 */
+      setFloatable(false);
     }
 
     protected JRadioButton getButton (String cmd, String img, String altText, String toolTip) {
@@ -409,6 +407,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       public void resetMarkers () {
         // Set markers to position values published by Sparkfun for AVC 2013
         markers = new ArrayList<>();
+        /*
         markers.add(new Marker(MarkerType.CIRCLE, 40.0710390, -105.2299660, 23, Color.RED));      // Barrel 1
         markers.add(new Marker(MarkerType.CIRCLE, 40.0709820, -105.2299570, 23, Color.RED));      // Barrel 2
         markers.add(new Marker(MarkerType.CIRCLE, 40.0709009, -105.2299000, 23, Color.RED));      // Barrel 3
@@ -423,6 +422,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         markers.add(new Marker(MarkerType.HOOP,   40.0708299, -105.2295309, 60, Color.GREEN, 60));// Hoop
         markers.add(new Marker(MarkerType.RECT,   40.0710810, -105.2291989, 45, Color.BLUE, 60)); // Ramp
         markers.add(new Marker(MarkerType.CIRCLE, 40.0713749, -105.2297889, 30, Color.WHITE));    // Start
+        */
       }
 
       public void loadMarkers (String data) {
@@ -830,9 +830,25 @@ public class GPSTileMap extends JFrame implements ActionListener {
     class MyMouseAdapter extends MouseAdapter  {
       public void mousePressed (MouseEvent event) {
         Point mp = rotate(new Point(event.getX(), event.getY()));
-        boolean shiftDown = event.isShiftDown();
-        if ("arrow".equals(tool)  ||  ("pin".equals(tool) && shiftDown)  ||  ("gps".equals(tool) && shiftDown)) {
-          if (shiftDown) {
+        if ("arrow".equals(tool)) {
+          Drawable mrk = findMarker(mp.x, mp.y);
+          if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) || mrk instanceof GPSReference) {
+            selected = mrk;
+          }
+        } else if ("hand".equals(tool)) {
+          sX = mp.x;
+          sY = mp.y;
+          pX = offX;
+          pY = offY;
+        } else if ("cross".equals(tool)) {
+          if (mapSet != null) {
+            LatLon loc = getMapLatLon(mp.x, mp.y);
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          } else {
+            toolInfo.setText("Map not loaded");
+          }
+        } else if ("magnifier".equals(tool)) {
+          if (mapSet != null) {
             Drawable mrk = findMarker(mp.x, mp.y);
             if (mrk != null  &&  mrk instanceof Waypoint) {
               Waypoint way = (Waypoint) mrk;
@@ -848,12 +864,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
               Object[] choices = strings.toArray(new String[strings.size()]);
               Object[][] message;
               if (gpsTileMap.expertMode) {
-                message = new Object[][] {{null, chk1}, {null, chk2},  {null, chk3}, {"Heading", opt}, {"Speed:"}};
+                message = new Object[][]{{null, chk1}, {null, chk2}, {null, chk3}, {"Heading", opt}, {"Speed:"}};
               } else {
-                message = new Object[][] {{"Speed:"}};
+                message = new Object[][]{{"Speed:"}};
               }
-              String ret = (String) JOptionPane.showInputDialog(null, message,  "Select Waypoint " + num + " Speed Option",
-                                                                JOptionPane.PLAIN_MESSAGE, null, choices, way.sel);
+              String ret = (String) JOptionPane.showInputDialog(null, message, "Select Waypoint " + num + " Speed Option",
+                  JOptionPane.PLAIN_MESSAGE, null, choices, way.sel);
               if (ret != null) {
                 way.sel = ret;
                 if (gpsTileMap.expertMode) {
@@ -864,7 +880,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
                     way.heading = Integer.parseInt(opt.getText());
                     if (way.heading < 0 || way.heading > 359) {
                       JOptionPane.showMessageDialog(null, "Invalid range for \"Heading\" field (0-359)",
-                                                    "Error", JOptionPane.PLAIN_MESSAGE);
+                          "Error", JOptionPane.PLAIN_MESSAGE);
                     }
                   } catch (Exception ex) {
                     JOptionPane.showMessageDialog(null, "Invalid value for \"Heading\" field", "Error", JOptionPane.PLAIN_MESSAGE);
@@ -883,34 +899,19 @@ public class GPSTileMap extends JFrame implements ActionListener {
               lat.setText(Double.toString(markSet.gpsReference.refLat));
               Object[][] message = {{"True Latitude:", lat}, {"True Longitude:"}};
               String lonTxt = (String)JOptionPane.showInputDialog(null, message,
-                                  "GPS Benchmark", JOptionPane.PLAIN_MESSAGE,
-                                  null, null, Double.toString(markSet.gpsReference.refLon));
+                  "GPS Benchmark", JOptionPane.PLAIN_MESSAGE,
+                  null, null, Double.toString(markSet.gpsReference.refLon));
               String latTxt = lat.getText();
               if (notEmpty(latTxt)  &&  notEmpty(lonTxt)) {
                 // Save coordinates to GPS Reference
                 markSet.gpsReference.setLoc(toDouble(latTxt), toDouble(lonTxt));
                 toolInfo.setText("dLat: " + formatLatLon(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
-                               ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
+                    ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
                 repaint();
               } else if (lonTxt != null) {
                 JOptionPane.showMessageDialog(null, "Must provide lat and lon values");
               }
             }
-          } else {
-            Drawable mrk = findMarker(mp.x, mp.y);
-            if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) || mrk instanceof GPSReference) {
-              selected = mrk;
-            }
-          }
-        } else if (shiftDown || "hand".equals(tool)) {
-          sX = mp.x;
-          sY = mp.y;
-          pX = offX;
-          pY = offY;
-        } else if ("cross".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
           } else {
             toolInfo.setText("Map not loaded");
           }
@@ -935,7 +936,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("ramp".equals(tool)) {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.markers.add(new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60));
+            Marker ramp = new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60);
+            selected = ramp;
+            markSet.markers.add(ramp);
             toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
@@ -944,7 +947,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("hoop".equals(tool)) {
           if (mapSet != null) {
             LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.markers.add(new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60));
+            Marker hoop = new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60);
+            selected = hoop;
+            markSet.markers.add(hoop);
             toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
             repaint();
           } else {
@@ -1000,21 +1005,44 @@ public class GPSTileMap extends JFrame implements ActionListener {
           }
         } else if ("tape".equals(tool)) {
           if (mapSet != null) {
-            if (tapePressed) {
-              LatLon loc = getMapLatLon(mp.x, mp.y);
-              double lat1 = GPSMap.degreesToRadians(loc.lat);
-              double lon1 = GPSMap.degreesToRadians(loc.lon);
-              double lat2 = GPSMap.degreesToRadians(tapeLoc.lat);
-              double lon2 = GPSMap.degreesToRadians(tapeLoc.lon);
-              // Note: Radius of Earh in kilometers is 6371
-              double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
-              // Note: 1 kilometer is 3280.84 feet
-              toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
-              tapePressed = false;
+            Drawable mkr = findMarker(mp.x, mp.y);
+            if (mkr != null  &&  mkr instanceof Waypoint) {
+              boolean first = true;
+              double dist = 0;
+              LatLon lst = null;
+              for (Waypoint way : markSet.waypoints) {
+                if (first) {
+                  lst = way.latLon;
+                  first = false;
+                } else {
+                  LatLon nxt = way.latLon;
+                  double lat1 = GPSMap.degreesToRadians(lst.lat);
+                  double lon1 = GPSMap.degreesToRadians(lst.lon);
+                  double lat2 = GPSMap.degreesToRadians(nxt.lat);
+                  double lon2 = GPSMap.degreesToRadians(nxt.lon);
+                  dist += Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+                  lst = nxt;
+                }
+                // Note: 1 kilometer is 3280.84 feet
+                toolInfo.setText("Total waypoint distance is " + feetFmt.format(dist * 3280.84) + " feet");
+              }
             } else {
-              tapeLoc = getMapLatLon(mp.x, mp.y);
-              toolInfo.setText("Select 2nd point");
-              tapePressed = true;
+              if (tapePressed) {
+                LatLon loc = getMapLatLon(mp.x, mp.y);
+                double lat1 = GPSMap.degreesToRadians(loc.lat);
+                double lon1 = GPSMap.degreesToRadians(loc.lon);
+                double lat2 = GPSMap.degreesToRadians(tapeLoc.lat);
+                double lon2 = GPSMap.degreesToRadians(tapeLoc.lon);
+                // Note: Radius of Earh in kilometers is 6371
+                double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+                // Note: 1 kilometer is 3280.84 feet
+                toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
+                tapePressed = false;
+              } else {
+                tapeLoc = getMapLatLon(mp.x, mp.y);
+                toolInfo.setText("Select 2nd point");
+                tapePressed = true;
+              }
             }
           } else {
             toolInfo.setText("Map not loaded");
@@ -1023,13 +1051,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
 
       public void mouseReleased (MouseEvent event) {
-        boolean shiftDown = event.isShiftDown();
         if ("arrow".equals(tool)) {
           if (selected != null) {
             repaint();
             selected = null;
           }
-        } else if (shiftDown || "hand".equals(tool)) {
+        } else if ("hand".equals(tool)) {
           prefs.putInt("window.offX", offX);
           prefs.putInt("window.offY", offY);
         }
@@ -1040,7 +1067,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       public void mouseDragged (MouseEvent event) {
         Point mp = rotate(new Point(event.getX(), event.getY()));
         boolean shiftDown = event.isShiftDown();
-        if ("arrow".equals(tool)) {
+        if ("arrow".equals(tool) || "ramp".equals(tool) || "hoop".equals(tool)) {
           if (selected != null) {
             if (shiftDown && selected instanceof Marker) {
               ((Marker) selected).doRotate(gpsTileMap.gpsMap, mp.x, mp.y);
@@ -1049,7 +1076,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
             }
             repaint();
           }
-        } else if (shiftDown || "hand".equals(tool)) {
+        } else if ("hand".equals(tool)) {
           win = getSize();
           int dX = sX - mp.x;
           int dY = sY - mp.y;
@@ -1353,7 +1380,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private Uploader (final String[] lines, final JMenu menu, JTextField toolInfo) {
       try {
         jsscPort.openPort();
-        coordMenu.setEnabled(false);
+        waypointMenu.setEnabled(false);
         pbar = new ProgressMonitor(gpsMap, "Uploading...", null, 0, lines.length);
         pbar.setMillisToPopup(10);
         // Fire a timer every once in a while to update the progress.
@@ -1416,7 +1443,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     JPanel toolPanel = new JPanel(new BorderLayout());
     JPanel info = new JPanel();
     info.add(new JLabel("Info:"));
-    JTextField toolInfo = new JTextField(20);
+    JTextField toolInfo = new JTextField(25);
     toolInfo.setEditable(false);
     toolInfo.setText("---");
     info.add(toolInfo);
@@ -1553,7 +1580,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     // Add Reset Obstacle Markers item
     JMenuItem resetObj = new JMenuItem("Reset Markers");
     resetObj.addActionListener(ev -> {
-      if (showWarningDialog("Reloading Obstacles will reset any changes you have made.  OK?")) {
+      if (showWarningDialog("Reloading Markers will reset any changes you have made.  OK?")) {
         gpsMap.markSet.resetMarkers();
         repaint();
       }
@@ -1562,7 +1589,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     // Add Load Markers item
     JMenuItem loadObj = new JMenuItem("Load Markers");
     loadObj.addActionListener(ev -> {
-      if (showWarningDialog("Loading Obstacles will discard current set.  OK?")) {
+      if (showWarningDialog("Loading Markers will discard current set.  OK?")) {
         fc.setSelectedFile(new File(prefs.get("default.dir", "/")));
         if (fc.showOpenDialog(gpsMap) == JFileChooser.APPROVE_OPTION) {
           try {
@@ -1601,21 +1628,21 @@ public class GPSTileMap extends JFrame implements ActionListener {
     //
     // Add Waypoints menu
     //
-    coordMenu = new JMenu("Waypoints");
+    waypointMenu = new JMenu("Waypoints");
     // Add Clear All Waypoints item
     JMenuItem mItem1 = new JMenuItem("Clear All Waypoints");
-    coordMenu.add(mItem1);
+    waypointMenu.add(mItem1);
     mItem1.addActionListener(ev -> gpsMap.clearWaypoints());
     // Add Upload Waypoints to Car item
     JMenuItem mItem2 = new JMenuItem("Upload Waypoints to Car");
-    coordMenu.add(mItem2);
+    waypointMenu.add(mItem2);
     mItem2.addActionListener(ev -> {
       String[] lines = gpsMap.getUploadData();
-      new Uploader(lines, coordMenu, toolInfo);
+      new Uploader(lines, waypointMenu, toolInfo);
     });
     // Add Save Waypoints As item
     JMenuItem mItem3 = new JMenuItem("Save Waypoints As...");
-    coordMenu.add(mItem3);
+    waypointMenu.add(mItem3);
     mItem3.addActionListener(ev -> {
       fc.setSelectedFile(new File(prefs.get("default.dir", "/")));
       if (fc.showSaveDialog(gpsMap) == JFileChooser.APPROVE_OPTION) {
@@ -1632,7 +1659,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     });
     // Add Load Waypoints item
     JMenuItem mItem4 = new JMenuItem("Load Waypoints");
-    coordMenu.add(mItem4);
+    waypointMenu.add(mItem4);
     mItem4.addActionListener(ev -> {
       fc.setSelectedFile(new File(prefs.get("default.dir", "/")));
       if (fc.showOpenDialog(gpsMap) == JFileChooser.APPROVE_OPTION) {
@@ -1646,9 +1673,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
         }
       }
     });
-    // Add Coord Report item
+    // Add Waypoints Report item
     JMenuItem mItem5 = new JMenuItem("Waypoints Report");
-    coordMenu.add(mItem5);
+    waypointMenu.add(mItem5);
     mItem5.addActionListener(ev -> {
       JTextArea textArea = new JTextArea(12, 36);
       StringBuilder buf = new StringBuilder();
@@ -1678,7 +1705,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     });
     // Add Show Waypoints item
     JMenuItem mItem6 = new JMenuItem("Show Waypoints");
-    coordMenu.add(mItem6);
+    waypointMenu.add(mItem6);
     mItem6.addActionListener(ev -> {
       JTextArea textArea = new JTextArea(12, 22);
       textArea.setText(gpsMap.markSet.getCsvCoords(gpsMap.settings));
@@ -1686,7 +1713,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       JScrollPane scrollPane = new JScrollPane(textArea);
       JOptionPane.showMessageDialog(gpsMap, scrollPane, "Current Waypoints", JOptionPane.PLAIN_MESSAGE);
     });
-    menuBar.add(coordMenu);
+    menuBar.add(waypointMenu);
     //
     // Add Settings menu
     //
@@ -1754,7 +1781,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     bumpMenu.add(bumpLoad);
     bumpLoad.addActionListener(ev -> {
       String[] lines = compileBumpCode();
-      new Uploader(lines, coordMenu, toolInfo);
+      new Uploader(lines, waypointMenu, toolInfo);
     });
     menuBar.add(bumpMenu);
     // Setup menubar
