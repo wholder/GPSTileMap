@@ -145,19 +145,19 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private GPSMap      gpsMap;
 
     public MyToolBar () {
-      super("Still draggable");
+      super();
       add(getButton("arrow",    "arrow.png",      "Move",         "Move Marker"));
       add(getButton("hand",     "hand.png",       "Drag",         "Drag Map", true));
       add(getButton("cross",    "crosshair.png",  "Crosshair",    "GPS Coords"));
       add(getButton("tape",     "tape.png",       "Tape",         "Measure Distancee"));
-      add(getButton("magnifier","magnifier.gif",  "Edit",         "Edit Waypoint or GPS Ref"));
+      add(getButton("magnifier","magnifier.gif",  "Edit",         "Edit Waypoint or GPS Reference"));
       add(getButton("pin",      "pin.png",        "Pin",          "Set Waypoint"));
       add(getButton("barrel",   "barrel.png",     "Barrel",       "Place Barrel"));
       add(getButton("ramp",     "ramp.png",       "Ramp",         "Place Ramp"));
       add(getButton("hoop",     "hoop.png",       "Hoop",         "Place Hoop"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
-      add(getButton("gps",      "gpsRef.png",     "GPS",          "GPS Reference"));
-      add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint"));
+      add(getButton("gps",      "gpsRef.png",     "GPS",          "Place GPS Reference"));
+      add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint or Marker"));
 /*
       add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
       add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
@@ -231,8 +231,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private int                   sX, sY, pX, pY, offX, offY;
     private int                   zoom;
     private int                   check;
-    private boolean               tapePressed, showMarkers, moveMarkers, showNumbers, showSettings, showWayLines;
-    private LatLon                tapeLoc;
+    private boolean               showMarkers, moveMarkers, showNumbers, showSettings, showWayLines;
+    private Point                 tapeStart, tapeEnd;
     private String                tool;
     private Drawable              selected;
     protected Settings            settings = new Settings();
@@ -1027,22 +1027,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
                 toolInfo.setText("Total waypoint distance is " + feetFmt.format(dist * 3280.84) + " feet");
               }
             } else {
-              if (tapePressed) {
-                LatLon loc = getMapLatLon(mp.x, mp.y);
-                double lat1 = GPSMap.degreesToRadians(loc.lat);
-                double lon1 = GPSMap.degreesToRadians(loc.lon);
-                double lat2 = GPSMap.degreesToRadians(tapeLoc.lat);
-                double lon2 = GPSMap.degreesToRadians(tapeLoc.lon);
-                // Note: Radius of Earh in kilometers is 6371
-                double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
-                // Note: 1 kilometer is 3280.84 feet
-                toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
-                tapePressed = false;
-              } else {
-                tapeLoc = getMapLatLon(mp.x, mp.y);
-                toolInfo.setText("Select 2nd point");
-                tapePressed = true;
-              }
+              tapeStart = new Point(mp.x, mp.y);
             }
           } else {
             toolInfo.setText("Map not loaded");
@@ -1059,6 +1044,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } else if ("hand".equals(tool)) {
           prefs.putInt("window.offX", offX);
           prefs.putInt("window.offY", offY);
+        } else if ("tape".equals(tool)) {
+          if (tapeStart != null) {
+            tapeStart = null;
+            tapeEnd = null;
+            repaint();
+          }
         }
       }
     }
@@ -1083,6 +1074,19 @@ public class GPSTileMap extends JFrame implements ActionListener {
           int base = zoom - BaseZoom;
           offX = Math.max(0, Math.min(zoomLevels[base].width - win.width, pX + dX));
           offY = Math.max(0, Math.min(zoomLevels[base].height - win.height, pY + dY));
+          repaint();
+        } else if ("tape".equals(tool)) {
+          tapeEnd = new Point(mp.x, mp.y);
+          LatLon loc1 = getMapLatLon(tapeStart.x, tapeStart.y);
+          LatLon loc2 = getMapLatLon(tapeEnd.x, tapeEnd.y);
+          double lat1 = GPSMap.degreesToRadians(loc1.lat);
+          double lon1 = GPSMap.degreesToRadians(loc1.lon);
+          double lat2 = GPSMap.degreesToRadians(loc2.lat);
+          double lon2 = GPSMap.degreesToRadians(loc2.lon);
+          // Note: Radius of Earh in kilometers is 6371
+          double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+          // Note: 1 kilometer is 3280.84 feet
+          toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
           repaint();
         }
       }
@@ -1236,6 +1240,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
             markSet.gpsReference.doDraw(this, g2, ret);
           }
         }
+      }
+      if (tapeStart != null  &&  tapeEnd != null) {
+        g2.setColor(Color.WHITE);
+        g2.drawLine(tapeStart.x, tapeStart.y, tapeEnd.x, tapeEnd.y);
       }
       g.drawImage(offScr, 0, 0, this);
     }
