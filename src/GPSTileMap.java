@@ -139,6 +139,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
     }
   }
 
+  /*
+   * Global Static Utility Methods
+   */
+
   private static class MyToolBar extends JToolBar implements ActionListener, ChangeListener {
     private ButtonGroup group = new ButtonGroup();
     private String      state;
@@ -158,11 +162,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
       add(getButton("gps",      "gpsRef.png",     "GPS",          "Place GPS Reference"));
       add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint or Marker"));
-/*
-      add(getButton("eye",    "target.png",     "Bullseye",     "Bullseye"));
-      add(getButton("cut",    "cut.gif",        "Cut",          "Cut"));
-      add(getButton("b6",     "notes.gif",      "AltName",      "Tooltip"));
-*/
       setFloatable(false);
     }
 
@@ -779,6 +778,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
     }
 
+    // Utility methods
+
     public Drawable findMarker (int x, int y) {
       for (Drawable mrk : markSet.waypoints) {
         if (mrk.selects(this, x, y, zoom)) {
@@ -796,8 +797,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return null;
     }
 
-    // Utility methods
-
     public boolean touches (Drawable mrk, int x, int y) {
       return mrk != null && mrk.selects(this, x, y, zoom);
     }
@@ -810,6 +809,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       this.tool = tool;
       if ("hand".equals(tool)) {
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+      //} else if ("cross".equals(tool)) {
+      //    setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
       } else {
         setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
       }
@@ -1302,6 +1303,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
       lines.add("!\n\r");
       return lines.toArray(new String[lines.size()]);
     }
+
+    /*
+     * GPSMap Utility Mehods
+     */
 
     public static int toFixed (double val) {
       return (int) (val * 10000000.0);
