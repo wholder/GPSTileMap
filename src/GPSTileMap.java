@@ -830,6 +830,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     class MyMouseAdapter extends MouseAdapter  {
       public void mousePressed (MouseEvent event) {
+        if (mapSet == null) {
+          toolInfo.setText("Map not loaded");
+          return;
+        }
         Point mp = rotate(new Point(event.getX(), event.getY()));
         if ("arrow".equals(tool)) {
           Drawable mrk = findMarker(mp.x, mp.y);
@@ -842,196 +846,156 @@ public class GPSTileMap extends JFrame implements ActionListener {
           pX = offX;
           pY = offY;
         } else if ("cross".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-          } else {
-            toolInfo.setText("Map not loaded");
-          }
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
         } else if ("magnifier".equals(tool)) {
-          if (mapSet != null) {
-            Drawable mrk = findMarker(mp.x, mp.y);
-            if (mrk != null  &&  mrk instanceof Waypoint) {
-              Waypoint way = (Waypoint) mrk;
-              int num = markSet.waypoints.indexOf(way) + 1;
-              JCheckBox chk1 = new JCheckBox("Avoid Barrels");
-              chk1.setSelected(way.avoidBarrels);
-              JCheckBox chk2 = new JCheckBox("Jump Ramp");
-              chk2.setSelected(way.jumpRamp);
-              JCheckBox chk3 = new JCheckBox("Raise Victory Flag");
-              chk3.setSelected(way.raiseFlag);
-              JTextField opt = new JTextField(Integer.toString(way.heading));
-              Set<String> strings = settings.wayVals.keySet();
-              Object[] choices = strings.toArray(new String[strings.size()]);
-              Object[][] message;
-              if (gpsTileMap.expertMode) {
-                message = new Object[][]{{null, chk1}, {null, chk2}, {null, chk3}, {"Heading", opt}, {"Speed:"}};
-              } else {
-                message = new Object[][]{{"Speed:"}};
-              }
-              String ret = (String) JOptionPane.showInputDialog(null, message, "Select Waypoint " + num + " Speed Option",
-                  JOptionPane.PLAIN_MESSAGE, null, choices, way.sel);
-              if (ret != null) {
-                way.sel = ret;
-                if (gpsTileMap.expertMode) {
-                  way.avoidBarrels = chk1.isSelected();
-                  way.jumpRamp = chk2.isSelected();
-                  way.raiseFlag = chk3.isSelected();
-                  try {
-                    way.heading = Integer.parseInt(opt.getText());
-                    if (way.heading < 0 || way.heading > 359) {
-                      JOptionPane.showMessageDialog(null, "Invalid range for \"Heading\" field (0-359)",
-                          "Error", JOptionPane.PLAIN_MESSAGE);
-                    }
-                  } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(null, "Invalid value for \"Heading\" field", "Error", JOptionPane.PLAIN_MESSAGE);
-                    return;
-                  }
-                } else {
-                  way.avoidBarrels = false;
-                  way.jumpRamp = false;
-                  way.raiseFlag = false;
-                  way.heading = 0;
-                }
-                repaint();
-              }
-            } else if (mrk instanceof GPSReference) {
-              JTextField lat = new JTextField();
-              lat.setText(Double.toString(markSet.gpsReference.refLat));
-              Object[][] message = {{"True Latitude:", lat}, {"True Longitude:"}};
-              String lonTxt = (String)JOptionPane.showInputDialog(null, message,
-                  "GPS Benchmark", JOptionPane.PLAIN_MESSAGE,
-                  null, null, Double.toString(markSet.gpsReference.refLon));
-              String latTxt = lat.getText();
-              if (notEmpty(latTxt)  &&  notEmpty(lonTxt)) {
-                // Save coordinates to GPS Reference
-                markSet.gpsReference.setLoc(toDouble(latTxt), toDouble(lonTxt));
-                toolInfo.setText("dLat: " + formatLatLon(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
-                    ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
-                repaint();
-              } else if (lonTxt != null) {
-                JOptionPane.showMessageDialog(null, "Must provide lat and lon values");
-              }
+          Drawable mrk = findMarker(mp.x, mp.y);
+          if (mrk != null  &&  mrk instanceof Waypoint) {
+            Waypoint way = (Waypoint) mrk;
+            int num = markSet.waypoints.indexOf(way) + 1;
+            JCheckBox chk1 = new JCheckBox("Avoid Barrels");
+            chk1.setSelected(way.avoidBarrels);
+            JCheckBox chk2 = new JCheckBox("Jump Ramp");
+            chk2.setSelected(way.jumpRamp);
+            JCheckBox chk3 = new JCheckBox("Raise Victory Flag");
+            chk3.setSelected(way.raiseFlag);
+            JTextField opt = new JTextField(Integer.toString(way.heading));
+            Set<String> strings = settings.wayVals.keySet();
+            Object[] choices = strings.toArray(new String[strings.size()]);
+            Object[][] message;
+            if (gpsTileMap.expertMode) {
+              message = new Object[][]{{null, chk1}, {null, chk2}, {null, chk3}, {"Heading", opt}, {"Speed:"}};
+            } else {
+              message = new Object[][]{{"Speed:"}};
             }
-          } else {
-            toolInfo.setText("Map not loaded");
+            String ret = (String) JOptionPane.showInputDialog(null, message, "Select Waypoint " + num + " Speed Option",
+                JOptionPane.PLAIN_MESSAGE, null, choices, way.sel);
+            if (ret != null) {
+              way.sel = ret;
+              if (gpsTileMap.expertMode) {
+                way.avoidBarrels = chk1.isSelected();
+                way.jumpRamp = chk2.isSelected();
+                way.raiseFlag = chk3.isSelected();
+                try {
+                  way.heading = Integer.parseInt(opt.getText());
+                  if (way.heading < 0 || way.heading > 359) {
+                    JOptionPane.showMessageDialog(null, "Invalid range for \"Heading\" field (0-359)",
+                        "Error", JOptionPane.PLAIN_MESSAGE);
+                  }
+                } catch (Exception ex) {
+                  JOptionPane.showMessageDialog(null, "Invalid value for \"Heading\" field", "Error", JOptionPane.PLAIN_MESSAGE);
+                  return;
+                }
+              } else {
+                way.avoidBarrels = false;
+                way.jumpRamp = false;
+                way.raiseFlag = false;
+                way.heading = 0;
+              }
+              repaint();
+            }
+          } else if (mrk instanceof GPSReference) {
+            JTextField lat = new JTextField();
+            lat.setText(Double.toString(markSet.gpsReference.refLat));
+            Object[][] message = {{"True Latitude:", lat}, {"True Longitude:"}};
+            String lonTxt = (String) JOptionPane.showInputDialog(null, message,
+                "GPS Benchmark", JOptionPane.PLAIN_MESSAGE,
+                null, null, Double.toString(markSet.gpsReference.refLon));
+            String latTxt = lat.getText();
+            if (notEmpty(latTxt) && notEmpty(lonTxt)) {
+              // Save coordinates to GPS Reference
+              markSet.gpsReference.setLoc(toDouble(latTxt), toDouble(lonTxt));
+              toolInfo.setText("dLat: " + formatLatLon(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
+                  ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
+              repaint();
+            } else if (lonTxt != null) {
+              JOptionPane.showMessageDialog(null, "Must provide lat and lon values");
+            }
           }
         } else if ("pin".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-            repaint();
-          } else {
-            toolInfo.setText("Map not loaded");
-          }
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
+          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          repaint();
         } else if ("barrel".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-            repaint();
-          } else {
-            toolInfo.setText("Map not loaded");
-          }
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
+          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          repaint();
         } else if ("ramp".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            Marker ramp = new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60);
-            selected = ramp;
-            markSet.markers.add(ramp);
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-            repaint();
-          } else {
-            toolInfo.setText("Map not loaded");
-          }
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          Marker ramp = new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60);
+          selected = ramp;
+          markSet.markers.add(ramp);
+          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          repaint();
         } else if ("hoop".equals(tool)) {
-          if (mapSet != null) {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            Marker hoop = new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60);
-            selected = hoop;
-            markSet.markers.add(hoop);
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-            repaint();
-          } else {
-            toolInfo.setText("Map not loaded");
-          }
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          Marker hoop = new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60);
+          selected = hoop;
+          markSet.markers.add(hoop);
+          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          repaint();
         } else if ("stanchion".equals(tool)) {
-          if (mapSet != null) {
-            Marker first = null;
-            // Find first Stanchion in chain
-            for (int ii = markSet.markers.size() - 1; ii >= 0; ii--) {
-              Marker tmp = markSet.markers.get(ii);
-              if (tmp.type == MarkerType.POLY)
-                first = tmp;
-              else
-                break;
-            }
-            if (touches(first, mp.x, mp.y)) {
-              markSet.markers.add(new Marker(true));
-            } else {
-              LatLon loc = getMapLatLon(mp.x, mp.y);
-              markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
-              toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
-            }
-            repaint();
-          } else {
-            toolInfo.setText("Map not loaded");
+          Marker first = null;
+          // Find first Stanchion in chain
+          for (int ii = markSet.markers.size() - 1; ii >= 0; ii--) {
+            Marker tmp = markSet.markers.get(ii);
+            if (tmp.type == MarkerType.POLY)
+              first = tmp;
+            else
+              break;
           }
-        } else if ("gps".equals(tool)) {
-          if (mapSet != null) {
+          if (touches(first, mp.x, mp.y)) {
+            markSet.markers.add(new Marker(true));
+          } else {
             LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.gpsReference = new GPSReference(loc.lat, loc.lon);
+            markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
+            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          }
+          repaint();
+        } else if ("gps".equals(tool)) {
+          LatLon loc = getMapLatLon(mp.x, mp.y);
+          markSet.gpsReference = new GPSReference(loc.lat, loc.lon);
+          repaint();
+        } else if ("trash".equals(tool)) {
+          Drawable mkr = findMarker(mp.x, mp.y);
+          if (mkr instanceof Waypoint) {
+            markSet.waypoints.remove(mkr);
+            repaint();
+          } else if (mkr instanceof GPSReference) {
+            markSet.gpsReference = null;
+            repaint();
+          } else if (mkr instanceof Marker) {
+            markSet.markers.remove(mkr);
             repaint();
           } else {
-            toolInfo.setText("Map not loaded");
-          }
-        } else if ("trash".equals(tool)) {
-          if (mapSet != null) {
-            Drawable mkr = findMarker(mp.x, mp.y);
-            if (mkr instanceof Waypoint) {
-              markSet.waypoints.remove(mkr);
-              repaint();
-            } else if (mkr instanceof GPSReference) {
-              markSet.gpsReference = null;
-              repaint();
-            } else if (mkr instanceof Marker) {
-              markSet.markers.remove(mkr);
-              repaint();
-            } else {
-              toolInfo.setText("Not found");
-            }
-          } else {
-            toolInfo.setText("Map not loaded");
+            toolInfo.setText("Not found");
           }
         } else if ("tape".equals(tool)) {
-          if (mapSet != null) {
-            Drawable mkr = findMarker(mp.x, mp.y);
-            if (mkr != null  &&  mkr instanceof Waypoint) {
-              boolean first = true;
-              double dist = 0;
-              LatLon lst = null;
-              for (Waypoint way : markSet.waypoints) {
-                if (first) {
-                  lst = way.latLon;
-                  first = false;
-                } else {
-                  LatLon nxt = way.latLon;
-                  double lat1 = GPSMap.degreesToRadians(lst.lat);
-                  double lon1 = GPSMap.degreesToRadians(lst.lon);
-                  double lat2 = GPSMap.degreesToRadians(nxt.lat);
-                  double lon2 = GPSMap.degreesToRadians(nxt.lon);
-                  dist += Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
-                  lst = nxt;
-                }
-                // Note: 1 kilometer is 3280.84 feet
-                toolInfo.setText("Total waypoint distance is " + feetFmt.format(dist * 3280.84) + " feet");
+          Drawable mkr = findMarker(mp.x, mp.y);
+          if (mkr != null  &&  mkr instanceof Waypoint) {
+            boolean first = true;
+            double dist = 0;
+            LatLon lst = null;
+            for (Waypoint way : markSet.waypoints) {
+              if (first) {
+                lst = way.latLon;
+                first = false;
+              } else {
+                LatLon nxt = way.latLon;
+                double lat1 = GPSMap.degreesToRadians(lst.lat);
+                double lon1 = GPSMap.degreesToRadians(lst.lon);
+                double lat2 = GPSMap.degreesToRadians(nxt.lat);
+                double lon2 = GPSMap.degreesToRadians(nxt.lon);
+                dist += Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+                lst = nxt;
               }
-            } else {
-              tapeStart = new Point(mp.x, mp.y);
+              // Note: 1 kilometer is 3280.84 feet
+              toolInfo.setText("Total waypoint distance is " + feetFmt.format(dist * 3280.84) + " feet");
             }
           } else {
-            toolInfo.setText("Map not loaded");
+            tapeStart = new Point(mp.x, mp.y);
           }
         }
       }
