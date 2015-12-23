@@ -1322,6 +1322,20 @@ public class GPSTileMap extends JFrame implements ActionListener {
       return buf.toString();
     }
 
+    /*
+     *  Locations in GPSTileMap can be in three different formats:
+     *
+     *  Latitude/Longitude values expressed in decimal degrees as double values.
+     *
+     *  Google Static Maps "World" Coordinates expressed as double values where
+     *  the X coordinate maps to Longitude and the Y to Lattitude.
+     *
+     *  Screen Pixel Values expressed an int values, but scaled by the zoom factor
+     *  currently selected for the map.
+     *
+     *  The following methods are used to convert between them.
+     */
+
     private static String formatLatLon (double val) {
       return latLonFmt.format(val);
     }
