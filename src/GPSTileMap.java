@@ -8,6 +8,8 @@ import javax.swing.event.ChangeListener;
 import javax.swing.filechooser.FileFilter;
 import java.awt.*;
 import java.awt.event.*;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
@@ -51,7 +53,7 @@ import java.util.prefs.Preferences;
   *     https://console.developers.google.com/apis/credentials?project=roboavr
   */
 
-public class GPSTileMap extends JFrame implements ActionListener {
+public class GPSTileMap extends JFrame implements ActionListener, Runnable {
   private static DecimalFormat declinationFmt = new DecimalFormat("#.#");
   private static char[]       hexVals = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
   private static int          OPEN_KEY  = KeyEvent.VK_O;
@@ -67,6 +69,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
   private JMenu               waypointMenu;
   private JMenu               settingsMenu;
   private JMenu               bumpMenu;
+  private JButton             runStop;
   private JFileChooser        fc = new JFileChooser();
   private ButtonGroup         zoomGroup = new ButtonGroup();
   private boolean             expertMode;
@@ -74,13 +77,14 @@ public class GPSTileMap extends JFrame implements ActionListener {
   private transient Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
   private static String       mapKey;
   private static TSAGeoMag    magModel;
+  private volatile boolean    simRun;
 
   {
     // Clear out any old preferences so any stored objects can be regenerated
-    if (!"2".equals(prefs.get("version", null))) {
+    if (!"2.1".equals(prefs.get("version", null))) {
       try {
         prefs.clear();
-        prefs.put("version", "2");
+        prefs.put("version", "2.1");
       } catch (BackingStoreException ex) {
         ex.printStackTrace(System.out);
       }
@@ -103,13 +107,17 @@ public class GPSTileMap extends JFrame implements ActionListener {
     }
   }
 
-  public static class LatLon implements Serializable {
+  public static class LonLat implements Serializable {
     private static final long serialVersionUID = 7686575451237322227L;
-    double                    lat, lon;
+    double                    lon, lat;
 
-    public LatLon (double lat, double lon) {
-      this.lat = lat;
+    public LonLat (double lon, double lat) {
       this.lon = lon;
+      this.lat = lat;
+    }
+
+    public LonLat copy () {
+      return new LonLat(lon, lat);
     }
   }
 
@@ -161,6 +169,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       add(getButton("hoop",     "hoop.png",       "Hoop",         "Place Hoop"));
       add(getButton("stanchion","stanchions.png", "stanchion",    "Place Stanchions"));
       add(getButton("gps",      "gpsRef.png",     "GPS",          "Place GPS Reference"));
+      add(getButton("car",      "car.png",        "Car",          "Place Sim Car"));
       add(getButton("trash",    "trash.gif",      "Delete",       "Delete Waypoint or Marker"));
       setFloatable(false);
     }
@@ -212,8 +221,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
   public static class GPSMap extends JPanel {
     private static Map<String,Color> colors = new HashMap<>();
     private static Map<Color,String> rColor = new HashMap<>();
-    private static DecimalFormat  latLonFmt = new DecimalFormat("#.0000000");
+    private static DecimalFormat  lonLatFmt = new DecimalFormat("#.0000000");
     private static DecimalFormat  feetFmt = new DecimalFormat("#.##");
+    private static DecimalFormat  worldFmt = new DecimalFormat("#.##########");
     private static final int      tileSize = 256, imgTileSize = 512;
     private static final double   pixelsPerLonDegree = tileSize / 360.0;
     private static final double   pixelsPerLonRadian = tileSize / (2.0 * Math.PI);
@@ -236,7 +246,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private Drawable              selected;
     protected Settings            settings = new Settings();
     private transient Preferences prefs;
-    private transient GPSTileMap gpsTileMap;
+    private transient GPSTileMap  gpsTileMap;
 
     static {
       colors.put("red", Color.RED);
@@ -265,22 +275,20 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private static class MapSet implements Serializable {
       private static final long   serialVersionUID = 6723304208987345944L;
       private String              name;
-      private int[]               pixLat = new int[3], pixLon = new int[3], ulLat = new int[3], ulLon = new int[3];
+      private Point[]             ulLoc = new Point[3];
+      private Point[]             mapLoc = new Point[3];
       private transient Image[]   maps = new Image[3];
       private byte[]              imgData;
-      private double              lat, lon;
+      private LonLat              loc;
 
-      public MapSet (String name, double lat, double lon) {
+      public MapSet (String name, LonLat loc) {
         this.name = name;
-        this.lat = lat;
-        this.lon = lon;
+        this.loc = loc;
         // Setup offsets for different zoom levels
         for (int ii = 0; ii < 3; ii++) {
-          pixLat[ii] = GPSMap.latToPixelY(lat, ii + BaseZoom);
-          pixLon[ii] = GPSMap.lonToPixelX(lon, ii + BaseZoom);
+          mapLoc[ii] = lonLanToPixel(loc, ii + BaseZoom);
           // Compute upper left corner of map
-          ulLat[ii] = pixLat[ii] - zoomLevels[ii].width / 2;
-          ulLon[ii] = pixLon[ii] - zoomLevels[ii].height / 2;
+          ulLoc[ii] = new Point(mapLoc[ii].x - zoomLevels[ii].width / 2, mapLoc[ii].y  - zoomLevels[ii].height / 2);
         }
       }
 
@@ -290,7 +298,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           int year = cal.get(Calendar.YEAR);
           int doy = cal.get(Calendar.DAY_OF_YEAR);
           double fracYear = (double) year + ((double) doy / 356.0);
-          return magModel.getDeclination(lat, lon, fracYear, 0);
+          return magModel.getDeclination(loc.lat, loc.lon, fracYear, 0);
         }
         return 0;
       }
@@ -314,7 +322,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         }
       }
 
-      // Compress images in maps[] to PNG formatLatLon temporarily saved to imgData[] then serialize to output stream
+      // Compress images in maps[] to PNG temporarily saved to imgData[] then serialize to output stream
       private void writeObject (ObjectOutputStream out) throws IOException {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         ImageIO.write((BufferedImage) maps[2], "png", bout);
@@ -342,12 +350,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
         return maps[base];
       }
 
-      private int getUlLat (int zoom) {
-        return ulLat[zoom - BaseZoom];
-      }
-
-      private int getUlLon (int zoom) {
-        return ulLon[zoom - BaseZoom];
+      private Point getUlLoc (int zoom) {
+        return ulLoc[zoom - BaseZoom];
       }
     }
 
@@ -357,6 +361,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       private List<Marker>      markers;
       private List<Waypoint>    waypoints;
       private GPSReference      gpsReference;
+      private SimCar            simCar;
 
       private MarkSet (String name) {
         this.name = name;
@@ -386,7 +391,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
         } catch (Exception ex) {
           System.out.println("Unable to save MarkSet: " + fName);
           return new MarkSet(name);
-       }
+        }
       }
 
       public void save () {
@@ -440,9 +445,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
             Color color = colors.get(items[4].trim().toLowerCase());
             color = color != null ? color : Color.ORANGE;
             if (items.length == 6) {
-              markers.add(new Marker(type, lat, lon, radius, color, Integer.valueOf(items[5].trim())));
+              markers.add(new Marker(type, new LonLat(lon, lat), radius, color, Integer.valueOf(items[5].trim())));
             } else {
-              markers.add(new Marker(type, lat, lon, radius, color));
+              markers.add(new Marker(type, new LonLat(lon, lat), radius, color));
             }
           }
         }
@@ -456,9 +461,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
             pOut.print(mrk.type.toString());
             if (mrk.type != MarkerType.POLYCLOSE) {
               pOut.print(",");
-              pOut.print(mrk.latLon.lat);
+              pOut.print(mrk.loc.lat);
               pOut.print(",");
-              pOut.print(mrk.latLon.lon);
+              pOut.print(mrk.loc.lon);
               pOut.print(",");
               pOut.print(mrk.diameter);
               pOut.print(",");
@@ -480,9 +485,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
       private String getCsvCoords (Settings settings) {
         StringBuilder buf = new StringBuilder();
         for (Waypoint way : waypoints) {
-          buf.append(formatLatLon(way.latLon.lat));
+          buf.append(lonLatFmt.format(way.loc.lat));
           buf.append(",");
-          buf.append(formatLatLon(way.latLon.lon));
+          buf.append(lonLatFmt.format(way.loc.lon));
           buf.append(",");
           //buf.append(settings.getCode(way.sel));
           int tmp = settings.getCode(way.sel) & 0x0F;
@@ -506,7 +511,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
           double lon = Double.parseDouble(items[1]);
           int cmd = Integer.parseInt(items[2]);
           String code = settings.getDesc(cmd & 0x0F);
-          Waypoint newWay = new Waypoint(lat, lon, code);
+          Waypoint newWay = new Waypoint(new LonLat(lon, lat), code);
           if ((cmd & 0x8000) != 0)
             newWay.avoidBarrels = true;
           if ((cmd & 0x4000) != 0)
@@ -530,27 +535,27 @@ public class GPSTileMap extends JFrame implements ActionListener {
       protected Color     color;
       private boolean     hasRotation;
 
-      public Marker (MarkerType type, double lat, double lon, int diameter, Color color) {
-        super(lat, lon, diameter);
+      public Marker (MarkerType type, LonLat loc, int diameter, Color color) {
+        super(loc, diameter);
         this.type = type;
         this.color = color;
       }
 
-      public Marker (MarkerType type, double lat, double lon, int diameter, Color color, int rotation) {
-        this(type, lat, lon, diameter, color);
+      public Marker (MarkerType type, LonLat loc, int diameter, Color color, int rotation) {
+        this(type, loc, diameter, color);
         this.rotation = rotation;
         hasRotation = true;
       }
 
       public Marker (boolean closed) {
-        super(0, 0, 0);
+        super(new LonLat(0, 0), 0);
         type = closed ? MarkerType.POLYCLOSE : MarkerType.POLYEND;
       }
 
       public void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
         if (hasRotation) {
-          Point loc = gpsMap.getMapLoc(latLon);
-          rotation = (int) Math.toDegrees(360 - Math.atan2(x - loc.x, y - loc.y));
+          Point mLoc = gpsMap.getMapLoc(loc);
+          rotation = (int) Math.toDegrees(Math.toRadians(180) - Math.atan2(x - mLoc.x, y - mLoc.y)) % 360;
         }
       }
 
@@ -558,38 +563,38 @@ public class GPSTileMap extends JFrame implements ActionListener {
         // Note: convert diameter from inches to pixels using factor of 2.2463006662281613 inches/pixel at zoom == 21
         int dia = (int) ((double) diameter / 2.2463006662281613) / (22 - gpsMap.zoom);
         g2.setColor(color);
-        Point loc = gpsMap.getMapLoc(latLon);
+        Point mLoc = gpsMap.getMapLoc(loc);
         g2.setStroke(new BasicStroke(1.0f));
         switch (type) {
           case CIRCLE: {
-              g2.fillOval(loc.x - dia / 2, loc.y - dia / 2, dia, dia);
+              g2.fillOval(mLoc.x - dia / 2, mLoc.y - dia / 2, dia, dia);
             }
             break;
           case RECT: {
               Graphics2D g2d = (Graphics2D)g2.create();
-              g2d.rotate(Math.toRadians(rotation), loc.x, loc.y);
-              g2d.fillRect(loc.x - dia / 2, loc.y - dia / 2, dia, dia);
+              g2d.rotate(Math.toRadians(rotation), mLoc.x, mLoc.y);
+              g2d.fillRect(mLoc.x - dia / 2, mLoc.y - dia / 2, dia, dia);
             }
             break;
           case HOOP: {
               Graphics2D g2d = (Graphics2D)g2.create();
-              g2d.rotate(Math.toRadians(rotation), loc.x, loc.y);
-              g2d.fillRect(loc.x - dia / 2, loc.y - 1, dia, 3);
+              g2d.rotate(Math.toRadians(rotation), mLoc.x, mLoc.y);
+              g2d.fillRect(mLoc.x - dia / 2, mLoc.y - 1, dia, 3);
             }
             break;
           case POLY: {
-            g2.fillOval(loc.x - dia / 2, loc.y - dia / 2, dia, dia);
+            g2.fillOval(mLoc.x - dia / 2, mLoc.y - dia / 2, dia, dia);
             if (ret != null && ret.length == 2) {
               Point lp = (Point) ret[1];
-              g2.drawLine(lp.x, lp.y, loc.x, loc.y);
-              return new Object[] {color, lp, new Point(loc.x, loc.y)};
+              g2.drawLine(lp.x, lp.y, mLoc.x, mLoc.y);
+              return new Object[] {color, lp, new Point(mLoc.x, mLoc.y)};
             } else if (ret != null && ret.length == 3) {
               Point fp = (Point) ret[1];
               Point lp = (Point) ret[2];
-              g2.drawLine(lp.x, lp.y, loc.x, loc.y);
-              return new Object[] {color, fp, new Point(loc.x, loc.y)};
+              g2.drawLine(lp.x, lp.y, mLoc.x, mLoc.y);
+              return new Object[] {color, fp, new Point(mLoc.x, mLoc.y)};
             }
-            return new Object[] {color, new Point(loc.x, loc.y)};
+            return new Object[] {color, new Point(mLoc.x, mLoc.y)};
             }
           case POLYCLOSE: {
             // Note: ends definition of Stanchion chain and draws closing segment
@@ -607,12 +612,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
             // Diameter of icon does not scale with zoom
             dia = 20;
             int hDia = dia / 2;
-            g2.drawLine(loc.x, loc.y - hDia, loc.x, loc.y - hDia / 2);
-            g2.drawLine(loc.x, loc.y + hDia, loc.x, loc.y + hDia / 2);
-            g2.drawLine(loc.x - hDia, loc.y, loc.x - hDia / 2, loc.y);
-            g2.drawLine(loc.x + hDia, loc.y, loc.x + hDia / 2, loc.y);
+            g2.drawLine(mLoc.x, mLoc.y - hDia, mLoc.x, mLoc.y - hDia / 2);
+            g2.drawLine(mLoc.x, mLoc.y + hDia, mLoc.x, mLoc.y + hDia / 2);
+            g2.drawLine(mLoc.x - hDia, mLoc.y, mLoc.x - hDia / 2, mLoc.y);
+            g2.drawLine(mLoc.x + hDia, mLoc.y, mLoc.x + hDia / 2, mLoc.y);
             g2.setStroke(thick[21 - gpsMap.zoom]);
-            g2.drawOval(loc.x - hDia, loc.y - hDia, dia, dia);
+            g2.drawOval(mLoc.x - hDia, mLoc.y - hDia, dia, dia);
           } break;
         }
         return new Object[0];
@@ -622,17 +627,207 @@ public class GPSTileMap extends JFrame implements ActionListener {
     abstract public static class Drawable implements Serializable {
       private static final long serialVersionUID = 7586575480447322227L;
       protected static Stroke[] thick = {new BasicStroke(3.0f), new BasicStroke(2.0f), new BasicStroke(1.0f)};
-      protected LatLon          latLon;
+      protected LonLat          loc;
       protected int             diameter;
 
-      public Drawable (double lat, double lon, int diameter) {
-        latLon = new LatLon(lat, lon);
+      public Drawable (LonLat loc, int diameter) {
+        this.loc = loc;
         this.diameter = diameter;
       }
 
-      public boolean selects (GPSTileMap.GPSMap gpsMap, int x, int y, int zoom) {
-        Point loc = gpsMap.getMapLoc(latLon);
-        return (int) Math.sqrt(Math.pow((double) loc.x - x, 2) + Math.pow((double) loc.y - y, 2)) < diameter / (22 - zoom);
+      public boolean selects (GPSTileMap.GPSMap gpsMap, int x, int y) {
+        Point mLoc = gpsMap.getMapLoc(loc);
+        return (int) Math.sqrt(Math.pow((double) mLoc.x - x, 2) + Math.pow((double) mLoc.y - y, 2)) < diameter / (22 - gpsMap.zoom);
+      }
+    }
+
+    public static class SimCar extends Drawable implements Serializable {
+      private static final long serialVersionUID = 7686215450217322227L;
+      private CarShape  carShape = new CarShape();
+      private LonLat    saveLoc;
+      private double    scale = 1.0, angle, saveAngle;
+      private double    maxSteer = 30, maxSpeed;
+      private double    speed, accel, decel;
+
+      private class CarShape extends Polygon {
+        private CarShape () {
+          // Left side                  f
+          addPoint(-4,  0);
+          addPoint(-4,  1);
+          addPoint(-5,  1);
+          addPoint(-5,  3);
+          addPoint(-4,  3);
+          addPoint(-4,  9);
+          addPoint(-5,  9);
+          addPoint(-5, 11);
+          addPoint(-4, 11);
+          addPoint(-4, 12);
+          // Right side
+          addPoint( 4, 12);
+          addPoint( 4, 11);
+          addPoint( 5, 11);
+          addPoint( 5,  9);
+          addPoint( 4,  9);
+          addPoint( 4,  3);
+          addPoint( 5,  3);
+          addPoint( 5,  1);
+          addPoint( 4,  1);
+          addPoint( 4,  0);
+        }
+      }
+
+      public SimCar (LonLat loc) {
+        super(loc, 30);
+        saveLoc = loc.copy();
+        decel = accel = 0.0000057419 / 200;
+        maxSpeed = 0.0000057419 / 5;
+      }
+
+      public void reset () {
+        loc = saveLoc.copy();
+        angle = saveAngle;
+        speed = 0;
+      }
+
+      public void doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2) {
+        Point mLoc = gpsMap.getMapLoc(loc);
+        // Rotate car shape to reflect steering angle and draw
+        AffineTransform at = AffineTransform.getTranslateInstance(mLoc.x, mLoc.y);
+        at.rotate(Math.toRadians((angle + 180.0) % 360.0));
+        int div = 1 << (2 - (gpsMap.zoom - BaseZoom));
+        double dScale = scale / div;
+        at.scale(dScale, dScale);
+        g2.setStroke(new BasicStroke(2.0f / div));
+        g2.setColor(Color.WHITE);
+        g2.fill(at.createTransformedShape(carShape));
+        g2.setStroke(new BasicStroke(1.0f / div));
+        g2.setColor(Color.BLACK);
+        g2.draw(at.createTransformedShape(carShape));
+      }
+
+      /**
+       * Update simulated robot car's position
+       * @param simRun true if simulation is enabled
+       * @return true if car has reached next waypoint
+       */
+      public boolean doMove (LonLat wayLon, LonLat prevLon, boolean simRun) {
+        // Convert LonLat Coords into World Coordinates
+        Point.Double prevWay = lonLatToWorld(prevLon);
+        Point.Double wayPnt = lonLatToWorld(wayLon);
+        Point2D.Double position = lonLatToWorld(loc);
+        // Next values in World Units
+        double length = 0.0000057419;       // Length of car
+        double wayRadius = 0.0000305325;    // Radius of waypoint trip point
+        double ciRadius = 0.0000305325;     // Radius of intersect circle around car's pivot point
+        if (speed < 0)
+          throw new IllegalArgumentException("Move < 0 not supported");
+        double steerAngle;
+        // Compute steering using line circle intersection
+        Point2D.Double[] ret = intersect(prevWay, wayPnt, position, ciRadius);
+        Point2D.Double ciPos = ret.length < 3 ? ret[0] : ret[1];
+        double tmp = addAngle(angleTo(position, ciPos), -this.angle);
+        if (tmp > 180)
+          tmp = -(360 - tmp);
+        steerAngle = Math.max(-maxSteer, Math.min(maxSteer, tmp));
+        // Drive around pivot point (approximates bicycle steering)
+        double radius = (1 / Math.tan(Math.abs(steerAngle) * Math.PI / 180)) * length;
+        double pRad = Math.toRadians(steerAngle < 0 ? angle : addAngle(angle, 180));
+        // Compute pivot point
+        Point.Double pivot = new Point.Double(position.x - Math.cos(pRad) * radius, position.y - Math.sin(pRad) * radius);
+        // Compute angle rotated around pivot proportional to distance
+        double circum = radius * 2 * Math.PI;
+        double tAngle = speed / circum * 360 * (steerAngle > 0 ? 1 : -1);
+        // Rotate car's position around pivot point
+        position = rotatePoint(position, pivot, tAngle);
+        // Update car's facing angle
+        angle = addAngle(angle, tAngle);
+        // Update car's newly-computed World position into LonLat coords
+        loc = worldToLonLat(position);
+        // Update speed using accel value
+        if (simRun) {
+          speed = Math.min(maxSpeed, speed + accel);
+        } else {
+          speed = Math.max(0, speed - decel);
+        }
+        // See if car has reached next waypoint
+        double remDist = Point2D.distance(position.x, position.y, wayPnt.x, wayPnt.y);
+        return remDist < wayRadius;
+      }
+
+      public void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
+        Point mLoc = gpsMap.getMapLoc(loc);
+        saveAngle = angle = Math.toDegrees(Math.toRadians(180) - Math.atan2(x - mLoc.x, y - mLoc.y)) % 360.0;
+      }
+
+      /**
+       * Line/Circle Intersection
+       * @param a previous waypoint
+       * @param b current waypoint
+       * @param c position of Car
+       * @param radius radious of circle to intersect with line drawn from a to b
+       * @return array of points (len 1 if intersection found, else 3)
+       */
+      private Point2D.Double[] intersect (Point2D.Double a, Point2D.Double b, Point2D.Double c, double radius) {
+        double dx1 = b.x - a.x;
+        double dy1 = b.y - a.y;
+        // compute the euclidean distance between A and B
+        double lab = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+        // compute the direction vector D from A to B
+        double dvx = dx1 / lab;
+        double dvy = dy1 / lab;
+        // Now the line equation is x = Dx*t + Ax, y = Dy*t + Ay with 0 <= t <= 1.
+        double t = dvx * (c.x - a.x) + dvy * (c.y - a.y);
+        // compute the coordinates of the point E on line and closest to C
+        double ex = t * dvx + a.x;
+        double ey = t * dvy + a.y;
+        // compute the euclidean distance from E to C
+        double dx2 = ex - c.x;
+        double dy2 = ey - c.y;
+        double lec = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        // test if the line intersects the circle
+        if (lec < radius) {
+          // compute distance from t to circle intersection point
+          double dt = Math.sqrt(radius * radius - lec * lec);
+          // return first and second intersection points
+          return new Point2D.Double[] {new Point2D.Double((t - dt) * dvx + a.x, (t - dt) * dvy + a.y),
+              new Point2D.Double((t + dt) * dvx + a.x, (t + dt) * dvy + a.y),
+              new Point2D.Double(ex, ey)};
+        }
+        // tangent point to circle is E
+        return new Point2D.Double[] {new Point2D.Double(ex, ey),};
+      }
+
+      private double angleTo (Point2D.Double car, Point2D.Double way) {
+        // Note: y axis is reversed on screen
+        double angle = Math.toDegrees(Math.atan2(way.x - car.x, car.y - way.y));
+        angle = angle < 0 ? angle + 360 : angle;
+        return angle;
+      }
+
+      private double addAngle (double angle, double add) {
+        angle += add;
+        if (angle > 360)
+          return angle - 360;
+        if (angle < 0)
+          return angle + 360;
+        return angle;
+      }
+
+      /**
+       * Rotates one point around another
+       * @param point The point to rotate.
+       * @param center The centre point of rotation.
+       * @param angle The rotation angle in degrees.
+       * @return Rotated point
+       */
+      private Point2D.Double rotatePoint (Point2D.Double point, Point2D.Double center, double angle) {
+        double radians = angle * (Math.PI / 180);
+        double cosTheta = Math.cos(radians);
+        double sinTheta = Math.sin(radians);
+        return new Point2D.Double(
+            (cosTheta * (point.x - center.x) - sinTheta * (point.y - center.y) + center.x),
+            (sinTheta * (point.x - center.x) + cosTheta * (point.y - center.y) + center.y)
+        );
       }
     }
 
@@ -642,8 +837,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       protected boolean  avoidBarrels, jumpRamp, raiseFlag;
       protected int      heading;
 
-      public Waypoint (double lat, double lon, String sel) {
-        super(lat, lon, 25);
+      public Waypoint (LonLat loc, String sel) {
+        super(loc, 25);
         this.sel = sel;
       }
 
@@ -651,13 +846,13 @@ public class GPSTileMap extends JFrame implements ActionListener {
         int dia = diameter / (22 - gpsMap.zoom);
         int hDia = dia / 2;
         g2.setColor(Color.WHITE);
-        Point loc = gpsMap.getMapLoc(latLon);
-        g2.drawLine(loc.x, loc.y - hDia, loc.x, loc.y - hDia / 2);
-        g2.drawLine(loc.x, loc.y + hDia, loc.x, loc.y + hDia / 2);
-        g2.drawLine(loc.x - hDia, loc.y, loc.x - hDia / 2, loc.y);
-        g2.drawLine(loc.x + hDia, loc.y, loc.x + hDia / 2, loc.y);
+        Point mLoc = gpsMap.getMapLoc(loc);
+        g2.drawLine(mLoc.x, mLoc.y - hDia, mLoc.x, mLoc.y - hDia / 2);
+        g2.drawLine(mLoc.x, mLoc.y + hDia, mLoc.x, mLoc.y + hDia / 2);
+        g2.drawLine(mLoc.x - hDia, mLoc.y, mLoc.x - hDia / 2, mLoc.y);
+        g2.drawLine(mLoc.x + hDia, mLoc.y, mLoc.x + hDia / 2, mLoc.y);
         g2.setStroke(thick[21 - gpsMap.zoom]);
-        g2.drawOval(loc.x - hDia, loc.y - hDia, dia, dia);
+        g2.drawOval(mLoc.x - hDia, mLoc.y - hDia, dia, dia);
         StringBuilder buf = new StringBuilder();
         if (gpsMap.showNumbers)
           buf.append(Integer.toString(num));
@@ -668,23 +863,23 @@ public class GPSTileMap extends JFrame implements ActionListener {
         }
         if (gpsMap.showNumbers) {
           g2.setColor(Color.BLACK);
-          g2.drawString(buf.toString(), loc.x + hDia + 1, loc.y - hDia + 1);
+          g2.drawString(buf.toString(), mLoc.x + hDia + 1, mLoc.y - hDia + 1);
           g2.setColor(Color.WHITE);
-          g2.drawString(buf.toString(), loc.x + hDia, loc.y - hDia);
+          g2.drawString(buf.toString(), mLoc.x + hDia, mLoc.y - hDia);
         }
         if (gpsMap.showWayLines) {
           g2.setStroke(new BasicStroke(1.0f));
           if (ret != null && ret.length == 1) {
             Point lp = (Point) ret[0];
-            g2.drawLine(lp.x, lp.y, loc.x, loc.y);
-            return new Object[] {lp, new Point(loc.x, loc.y)};
+            g2.drawLine(lp.x, lp.y, mLoc.x, mLoc.y);
+            return new Object[] {lp, new Point(mLoc.x, mLoc.y)};
           } else if (ret != null && ret.length == 2) {
             Point fp = (Point) ret[0];
             Point lp = (Point) ret[1];
-            g2.drawLine(lp.x, lp.y, loc.x, loc.y);
-            return new Object[] {fp, new Point(loc.x, loc.y)};
+            g2.drawLine(lp.x, lp.y, mLoc.x, mLoc.y);
+            return new Object[] {fp, new Point(mLoc.x, mLoc.y)};
           }
-          return new Object[] {new Point(loc.x, loc.y)};
+          return new Object[] {new Point(mLoc.x, mLoc.y)};
         }
         return null;
       }
@@ -694,8 +889,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       private static final long     serialVersionUID = 7686575480447322227L;
       private double  refLat, refLon;
 
-      public GPSReference (double lat, double lon) {
-        super(MarkerType.GPSREF, lat, lon, 20, Color.ORANGE);
+      public GPSReference (LonLat loc) {
+        super(MarkerType.GPSREF, loc, 20, Color.ORANGE);
       }
 
       public void setLoc (double refLat, double refLon) {
@@ -704,11 +899,11 @@ public class GPSTileMap extends JFrame implements ActionListener {
       }
 
       public int getDeltaLat () {
-        return toFixed(refLat - latLon.lat);
+        return toFixed(refLat - loc.lat);
       }
 
       public int getDeltaLon () {
-        return toFixed(refLon - latLon.lon);
+        return toFixed(refLon - loc.lon);
       }
    }
 
@@ -780,29 +975,32 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     // Utility methods
 
-    public Drawable findMarker (int x, int y) {
+    public Drawable findDrawable (int x, int y) {
       for (Drawable mrk : markSet.waypoints) {
-        if (mrk.selects(this, x, y, zoom)) {
+        if (mrk.selects(this, x, y)) {
           return mrk;
         }
       }
       for (Drawable mrk : markSet.markers) {
-        if (mrk.selects(this, x, y, zoom)) {
+        if (mrk.selects(this, x, y)) {
           return mrk;
         }
       }
-      if (markSet.gpsReference != null &&  markSet.gpsReference.selects(this, x, y, zoom)) {
+      if (markSet.gpsReference != null &&  markSet.gpsReference.selects(this, x, y)) {
         return markSet.gpsReference;
+      }
+      if (markSet.simCar != null &&  markSet.simCar.selects(this, x, y)) {
+        return markSet.simCar;
       }
       return null;
     }
 
     public boolean touches (Drawable mrk, int x, int y) {
-      return mrk != null && mrk.selects(this, x, y, zoom);
+      return mrk != null && mrk.selects(this, x, y);
     }
 
     private void setPosition (Drawable mrk, int x, int y) {
-      mrk.latLon = getMapLatLon(x, y);
+      mrk.loc = getMapLonLat(x, y);
     }
 
     public void setTool (String tool) {
@@ -836,8 +1034,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
         }
         Point mp = rotate(new Point(event.getX(), event.getY()));
         if ("arrow".equals(tool)) {
-          Drawable mrk = findMarker(mp.x, mp.y);
-          if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) || mrk instanceof GPSReference) {
+          Drawable mrk = findDrawable(mp.x, mp.y);
+          if (mrk instanceof Waypoint || (mrk instanceof Marker && moveMarkers) ||
+              mrk instanceof GPSReference || mrk instanceof SimCar) {
             selected = mrk;
           }
         } else if ("hand".equals(tool)) {
@@ -846,10 +1045,10 @@ public class GPSTileMap extends JFrame implements ActionListener {
           pX = offX;
           pY = offY;
         } else if ("cross".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
         } else if ("magnifier".equals(tool)) {
-          Drawable mrk = findMarker(mp.x, mp.y);
+          Drawable mrk = findDrawable(mp.x, mp.y);
           if (mrk != null  &&  mrk instanceof Waypoint) {
             Waypoint way = (Waypoint) mrk;
             int num = markSet.waypoints.indexOf(way) + 1;
@@ -905,36 +1104,36 @@ public class GPSTileMap extends JFrame implements ActionListener {
             if (notEmpty(latTxt) && notEmpty(lonTxt)) {
               // Save coordinates to GPS Reference
               markSet.gpsReference.setLoc(toDouble(latTxt), toDouble(lonTxt));
-              toolInfo.setText("dLat: " + formatLatLon(markSet.gpsReference.refLat - markSet.gpsReference.latLon.lat) +
-                  ", dLon: " + formatLatLon(markSet.gpsReference.refLon - markSet.gpsReference.latLon.lon));
+              toolInfo.setText("dLat: " + lonLatFmt.format(markSet.gpsReference.refLat - markSet.gpsReference.loc.lat) +
+                  ", dLon: " + lonLatFmt.format(markSet.gpsReference.refLon - markSet.gpsReference.loc.lon));
               repaint();
             } else if (lonTxt != null) {
               JOptionPane.showMessageDialog(null, "Must provide lat and lon values");
             }
           }
         } else if ("pin".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          markSet.waypoints.add(new Waypoint(loc.lat, loc.lon, settings.getDefault()));
-          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          markSet.waypoints.add(new Waypoint(loc, settings.getDefault()));
+          toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
           repaint();
         } else if ("barrel".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          markSet.markers.add(new Marker(MarkerType.CIRCLE, loc.lat, loc.lon, 23, Color.RED));
-          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          markSet.markers.add(new Marker(MarkerType.CIRCLE, loc, 23, Color.RED));
+          toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
           repaint();
         } else if ("ramp".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          Marker ramp = new Marker(MarkerType.RECT, loc.lat, loc.lon, 45, Color.BLUE, 60);
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          Marker ramp = new Marker(MarkerType.RECT, loc, 45, Color.BLUE, 60);
           selected = ramp;
           markSet.markers.add(ramp);
-          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
           repaint();
         } else if ("hoop".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          Marker hoop = new Marker(MarkerType.HOOP, loc.lat, loc.lon, 60, Color.GREEN, 60);
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          Marker hoop = new Marker(MarkerType.HOOP, loc, 60, Color.GREEN, 60);
           selected = hoop;
           markSet.markers.add(hoop);
-          toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+          toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
           repaint();
         } else if ("stanchion".equals(tool)) {
           Marker first = null;
@@ -949,17 +1148,22 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (touches(first, mp.x, mp.y)) {
             markSet.markers.add(new Marker(true));
           } else {
-            LatLon loc = getMapLatLon(mp.x, mp.y);
-            markSet.markers.add(new Marker(MarkerType.POLY, loc.lat, loc.lon, 12, Color.YELLOW));
-            toolInfo.setText(formatLatLon(loc.lat) + ", " + formatLatLon(loc.lon));
+            LonLat loc = getMapLonLat(mp.x, mp.y);
+            markSet.markers.add(new Marker(MarkerType.POLY, loc, 12, Color.YELLOW));
+            toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
           }
           repaint();
         } else if ("gps".equals(tool)) {
-          LatLon loc = getMapLatLon(mp.x, mp.y);
-          markSet.gpsReference = new GPSReference(loc.lat, loc.lon);
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          markSet.gpsReference = new GPSReference(loc);
+          repaint();
+        } else if ("car".equals(tool)) {
+          LonLat loc = getMapLonLat(mp.x, mp.y);
+          selected = markSet.simCar = new SimCar(loc);
+          gpsTileMap.runStop.setEnabled(true);
           repaint();
         } else if ("trash".equals(tool)) {
-          Drawable mkr = findMarker(mp.x, mp.y);
+          Drawable mkr = findDrawable(mp.x, mp.y);
           if (mkr instanceof Waypoint) {
             markSet.waypoints.remove(mkr);
             repaint();
@@ -969,30 +1173,29 @@ public class GPSTileMap extends JFrame implements ActionListener {
           } else if (mkr instanceof Marker) {
             markSet.markers.remove(mkr);
             repaint();
+          } else if (mkr instanceof SimCar) {
+            markSet.simCar = null;
+            gpsTileMap.runStop.setEnabled(false);
+            repaint();
           } else {
             toolInfo.setText("Not found");
           }
         } else if ("tape".equals(tool)) {
-          Drawable mkr = findMarker(mp.x, mp.y);
+          Drawable mkr = findDrawable(mp.x, mp.y);
           if (mkr != null  &&  mkr instanceof Waypoint) {
             boolean first = true;
-            double dist = 0;
-            LatLon lst = null;
+            double feet = 0;
+            LonLat lst = null;
             for (Waypoint way : markSet.waypoints) {
               if (first) {
-                lst = way.latLon;
+                lst = way.loc;
                 first = false;
               } else {
-                LatLon nxt = way.latLon;
-                double lat1 = GPSMap.degreesToRadians(lst.lat);
-                double lon1 = GPSMap.degreesToRadians(lst.lon);
-                double lat2 = GPSMap.degreesToRadians(nxt.lat);
-                double lon2 = GPSMap.degreesToRadians(nxt.lon);
-                dist += Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+                LonLat nxt = way.loc;
+                feet += distanceInFeet(lst, nxt);
                 lst = nxt;
               }
-              // Note: 1 kilometer is 3280.84 feet
-              toolInfo.setText("Total waypoint distance is " + feetFmt.format(dist * 3280.84) + " feet");
+              toolInfo.setText("Total waypoint distance is " + feetFmt.format(feet) + " feet");
             }
           } else {
             tapeStart = new Point(mp.x, mp.y);
@@ -1023,10 +1226,12 @@ public class GPSTileMap extends JFrame implements ActionListener {
       public void mouseDragged (MouseEvent event) {
         Point mp = rotate(new Point(event.getX(), event.getY()));
         boolean shiftDown = event.isShiftDown();
-        if ("arrow".equals(tool) || "ramp".equals(tool) || "hoop".equals(tool)) {
+        if ("arrow".equals(tool) || "ramp".equals(tool) || "hoop".equals(tool) || "car".equals(tool)) {
           if (selected != null) {
             if (shiftDown && selected instanceof Marker) {
               ((Marker) selected).doRotate(gpsTileMap.gpsMap, mp.x, mp.y);
+            } else if (shiftDown && selected instanceof SimCar) {
+              ((SimCar) selected).doRotate(gpsTileMap.gpsMap, mp.x, mp.y);
             } else {
               setPosition(selected, mp.x, mp.y);
             }
@@ -1042,16 +1247,26 @@ public class GPSTileMap extends JFrame implements ActionListener {
           repaint();
         } else if ("tape".equals(tool)) {
           tapeEnd = new Point(mp.x, mp.y);
-          LatLon loc1 = getMapLatLon(tapeStart.x, tapeStart.y);
-          LatLon loc2 = getMapLatLon(tapeEnd.x, tapeEnd.y);
-          double lat1 = GPSMap.degreesToRadians(loc1.lat);
-          double lon1 = GPSMap.degreesToRadians(loc1.lon);
-          double lat2 = GPSMap.degreesToRadians(loc2.lat);
-          double lon2 = GPSMap.degreesToRadians(loc2.lon);
-          // Note: Radius of Earh in kilometers is 6371
-          double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
-          // Note: 1 kilometer is 3280.84 feet
-          toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
+          if (shiftDown) {
+            Point.Double loc1 = lonLatToWorld(getMapLonLat(tapeStart.x, tapeStart.y));
+            Point.Double loc2 = lonLatToWorld(getMapLonLat(tapeEnd.x, tapeEnd.y));
+            double dx = Math.abs(loc1.x - loc2.x);
+            double dy = Math.abs(loc1.y - loc2.y);
+            double dist = Math.sqrt(dx * dx + dy * dy);
+            toolInfo.setText("" + worldFmt.format(dist) + " World Units");
+
+          } else {
+            LonLat loc1 = getMapLonLat(tapeStart.x, tapeStart.y);
+            LonLat loc2 = getMapLonLat(tapeEnd.x, tapeEnd.y);
+            double lat1 = degreesToRadians(loc1.lat);
+            double lon1 = degreesToRadians(loc1.lon);
+            double lat2 = degreesToRadians(loc2.lat);
+            double lon2 = degreesToRadians(loc2.lon);
+            // Note: Radius of Earh in kilometers is 6371
+            double dist = Math.acos(Math.sin(lat2) * Math.sin(lat1) + Math.cos(lat2) * Math.cos(lat1) * Math.cos(lon1 - lon2)) * 6371;
+            // Note: 1 kilometer is 3280.84 feet
+            toolInfo.setText("Distance is " + feetFmt.format(dist * 3280.84) + " feet");
+          }
           repaint();
         }
       }
@@ -1074,10 +1289,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       int newIdx = newZoom - BaseZoom;
       int hWid = win.width / 2;
       int hHyt = win.height / 2;
-      int cx = offX + hWid;
-      int cy = offY + hHyt;
-      double dx = (double) cx / zoomLevels[oldIdx].width;
-      double dy = (double) cy / zoomLevels[oldIdx].height;
+      double dx = (double) (offX + hWid) / zoomLevels[oldIdx].width;
+      double dy = (double) (offY + hHyt) / zoomLevels[oldIdx].height;
       offX = (int) (dx * zoomLevels[newIdx].width) - hWid;
       offY = (int) (dy * zoomLevels[newIdx].height) - hHyt;
       offX = Math.max(0, Math.min(zoomLevels[newIdx].width - win.width, offX));
@@ -1088,16 +1301,14 @@ public class GPSTileMap extends JFrame implements ActionListener {
       prefs.putInt("window.offY", offY);
     }
 
-    protected Point getMapLoc (LatLon latLon) {
-      int y = GPSMap.latToPixelY(latLon.lat, zoom) - (mapSet.getUlLat(zoom) + offY);
-      int x = GPSMap.lonToPixelX(latLon.lon, zoom) - (mapSet.getUlLon(zoom) + offX);
-      return new Point(x, y);
+    protected Point getMapLoc (LonLat loc) {
+      Point pLoc = lonLanToPixel(loc, zoom);
+      return new Point(pLoc.x - (mapSet.getUlLoc(zoom).x + offX), pLoc.y - (mapSet.getUlLoc(zoom).y + offY));
     }
 
-    protected LatLon getMapLatLon (int mx, int my) {
-      double lat = GPSMap.pixelYToLat(mapSet.getUlLat(zoom) + offY + my, zoom);
-      double lon = GPSMap.pixelXToLon(mapSet.getUlLon(zoom) + offX + mx, zoom);
-      return new LatLon(lat, lon);
+    protected LonLat getMapLonLat (int mx, int my) {
+      Point pLoc = new Point(mapSet.getUlLoc(zoom).x + offX + mx, mapSet.getUlLoc(zoom).y + offY + my);
+      return GPSMap.pixelToLonLat(pLoc,  zoom);
     }
 
     private void saveObject (String name, Object obj) {
@@ -1155,14 +1366,15 @@ public class GPSTileMap extends JFrame implements ActionListener {
     public void setMap (MapSet mapSet) {
       this.mapSet = mapSet;
       setTool("hand");
-      markSet = MarkSet.load(mapSet.name);
-      initSettiings();
-      screenRotate = prefs.getBoolean("rotate.on", true);
+      screenRotate = prefs.getBoolean("rotate.on", false);
       showMarkers = prefs.getBoolean("markers.on", true);
       moveMarkers = prefs.getBoolean("move_markers.on", false);
       showNumbers = prefs.getBoolean("numbers.on", false);
       showSettings = prefs.getBoolean("settings.on", false);
       showWayLines = prefs.getBoolean("waylines.on", true);
+      markSet = MarkSet.load(mapSet.name);
+      initSettiings();
+      gpsTileMap.runStop.setEnabled(markSet.simCar != null);
       repaint();
     }
 
@@ -1204,6 +1416,9 @@ public class GPSTileMap extends JFrame implements ActionListener {
           if (markSet.gpsReference != null) {
             markSet.gpsReference.doDraw(this, g2, ret);
           }
+          if (markSet.simCar != null) {
+            markSet.simCar.doDraw(this, g2);
+          }
         }
       }
       if (tapeStart != null  &&  tapeEnd != null) {
@@ -1232,8 +1447,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
         buf.append(toHexByte(markSet.gpsReference.getDeltaLat(), 8));
         buf.append(toHexByte(markSet.gpsReference.getDeltaLon(), 8));
         // Output Marker Coords (location on map)
-        buf.append(toHexByte(toFixed(markSet.gpsReference.latLon.lat), 8));
-        buf.append(toHexByte(toFixed(markSet.gpsReference.latLon.lon), 8));
+        buf.append(toHexByte(toFixed(markSet.gpsReference.loc.lat), 8));
+        buf.append(toHexByte(toFixed(markSet.gpsReference.loc.lon), 8));
         // Output Reference Coords (from dialog)
         buf.append(toHexByte(toFixed(markSet.gpsReference.refLat), 8));
         buf.append(toHexByte(toFixed(markSet.gpsReference.refLon), 8));
@@ -1246,8 +1461,8 @@ public class GPSTileMap extends JFrame implements ActionListener {
       int num = 0;
       for (GPSMap.Waypoint way : markSet.waypoints) {
         check = 0;
-        int lat = toFixed(way.latLon.lat);
-        int lon = toFixed(way.latLon.lon);
+        int lat = toFixed(way.loc.lat);
+        int lon = toFixed(way.loc.lon);
         buf = new StringBuilder("$");
         buf.append(toHexByte(num, 2));
         buf.append(toHexByte(lat, 8));
@@ -1269,7 +1484,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
     }
 
     /*
-     * GPSMap Utility Mehods
+     * GPSTileMap Utility Mehods
      */
 
     public static int toFixed (double val) {
@@ -1293,34 +1508,13 @@ public class GPSTileMap extends JFrame implements ActionListener {
      *
      *  Google Static Maps "World" Coordinates expressed as double values where
      *  the X coordinate maps to Longitude and the Y to Lattitude.
+     *  See: https://developers.google.com/maps/documentation/javascript/maptypes?hl=en
      *
      *  Screen Pixel Values expressed an int values, but scaled by the zoom factor
      *  currently selected for the map.
      *
      *  The following methods are used to convert between them.
      */
-
-    private static String formatLatLon (double val) {
-      return latLonFmt.format(val);
-    }
-
-    private static double pixelXToLon (int pixelX, int zoom) {
-      return worldXToLon(pixelXToWorldX(pixelX, zoom));
-    }
-
-    private static double pixelYToLat (int pixelY, int zoom) {
-      return worldYToLat(pixelYToWorldY(pixelY, zoom));
-    }
-
-    private static double pixelXToWorldX (int pixelX, int zoom) {
-      double numTiles = 1 << zoom;
-      return pixelX / numTiles;
-    }
-
-    private static double pixelYToWorldY (int pixelY, int zoom) {
-      double numTiles = 1 << zoom;
-      return pixelY / numTiles;
-    }
 
     private static double worldXToLon (double worldX) {
       return (worldX - origin) / pixelsPerLonDegree;
@@ -1329,16 +1523,6 @@ public class GPSTileMap extends JFrame implements ActionListener {
     private static double worldYToLat (double worldY) {
       double latRadians = (worldY - origin) / -pixelsPerLonRadian;
       return GPSMap.radiansToDegrees(2.0 * Math.atan(Math.exp(latRadians)) - Math.PI / 2);
-    }
-
-    private static int lonToPixelX (double lon, int zoom) {
-      double numTiles = 1 << zoom;
-      return (int) (lonToWorldX(lon) * numTiles);
-    }
-
-    private static int latToPixelY (double lat, int zoom) {
-      double numTiles = 1 << zoom;
-      return (int) (latToWorldY(lat) * numTiles);
     }
 
     private static double lonToWorldX (double lon) {
@@ -1356,6 +1540,47 @@ public class GPSTileMap extends JFrame implements ActionListener {
 
     private static double radiansToDegrees (double rad) {
       return rad / (Math.PI / 180.0);
+    }
+
+    private static Point lonLanToPixel (LonLat loc, int zoom) {
+      double numTiles = 1 << zoom;
+      return new Point((int) (lonToWorldX(loc.lon) * numTiles), (int) (latToWorldY(loc.lat) * numTiles));
+    }
+
+    private static LonLat pixelToLonLat (Point pLoc, int zoom) {
+      double numTiles = 1 << zoom;
+      return new LonLat(worldXToLon((double) pLoc.x / numTiles), worldYToLat((double) pLoc.y / numTiles));
+    }
+
+    private static Point.Double lonLatToWorld (LonLat loc) {
+      return new Point.Double(lonToWorldX(loc.lon), latToWorldY(loc.lat));
+    }
+
+    private static LonLat worldToLonLat (Point.Double wLoc) {
+      return new LonLat(worldXToLon(wLoc.x), worldYToLat(wLoc.y));
+    }
+
+    /**
+     * Uses Haversine formula to calculate great circle distance between two points on a globe.
+     * See: http://www.movable-type.co.uk/scripts/latlong.html
+     * @param loc1 LonLat of point 1
+     * @param loc2 LonLat of point 2
+     * @return distance in kilometers
+     */
+    private static double distanceInKilometers (LonLat loc1, LonLat loc2) {
+      // Haversine formula
+      double φ1 = degreesToRadians(loc1.lat);
+      double φ2 = degreesToRadians(loc2.lat);
+      double Δφ = degreesToRadians(loc2.lat - loc1.lat);
+      double Δλ = degreesToRadians(loc2.lon - loc1.lon);
+      double a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      // Note: Radius of Earh in kilometers is 6371
+      return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 6371;
+    }
+
+    private static double distanceInFeet (LonLat loc1, LonLat loc2) {
+      // Note: 1 kilometer is 3280.84 feet
+      return distanceInKilometers(loc1, loc2) * 3280.84;
     }
   }
 
@@ -1420,6 +1645,36 @@ public class GPSTileMap extends JFrame implements ActionListener {
     }
   }
 
+  public void run () {
+    if (gpsMap.markSet.waypoints.size() < 1) {
+      showErrorDialog("Must set at least one waypoint!");
+      return;
+    }
+    try {
+      LonLat[] locWays = new LonLat[gpsMap.markSet.waypoints.size() + 1];
+      locWays[0] = gpsMap.markSet.simCar.loc;
+      int ii = 1;
+      for (GPSTileMap.GPSMap.Waypoint wPnt : gpsMap.markSet.waypoints) {
+        locWays[ii++] = wPnt.loc;
+      }
+      int wayIdx = 1;
+      while (simRun) {
+        // Drive autonomous
+        if (gpsMap.markSet.simCar.doMove(locWays[wayIdx], locWays[wayIdx - 1], simRun)) {
+          wayIdx++;
+          if (wayIdx > gpsMap.markSet.waypoints.size()) {
+            simRun = false;
+            runStop.setText("RUN");
+          }
+        }
+        repaint();
+        Thread.sleep(20);   // ~50 fps
+      }
+    } catch (Exception ex) {
+      ex.printStackTrace(System.out);
+    }
+  }
+
   GPSTileMap () {
     super("GPS Tile Map");
     File uDir = new File(userDir);
@@ -1431,6 +1686,33 @@ public class GPSTileMap extends JFrame implements ActionListener {
     setBackground(Color.white);
     setLayout(new BorderLayout(1, 1));
     MyToolBar toolBar = new MyToolBar();
+    // Add Run/Stop Button to toolbar
+    runStop = new JButton("RUN");
+    runStop.setEnabled(false);
+    runStop.setFont(new Font("Arial", Font.PLAIN, 20));
+    runStop.setToolTipText("Run/Stop Simulation");
+    runStop.addActionListener((ev) -> {
+      if ("RUN".equals(runStop.getText())) {
+        runStop.setText("STOP");
+        simRun = true;
+        (new Thread(this)).start();
+      } else {
+        runStop.setText("RUN");
+        simRun = false;
+      }
+    });
+    toolBar.add(runStop);
+    // Add RESET Button to put car back at starting position
+    JButton reset = new JButton("RESET");
+    reset.setFont(new Font("Arial", Font.PLAIN, 20));
+    reset.setToolTipText("Reset Car's Position to Start");
+    reset.addActionListener((ev) -> {
+      if (gpsMap.markSet.simCar != null) {
+        gpsMap.markSet.simCar.reset();
+        repaint();
+      }
+    });
+    toolBar.add(reset);
     JPanel toolPanel = new JPanel(new BorderLayout());
     JPanel info = new JPanel();
     info.add(new JLabel("Info:"));
@@ -1675,12 +1957,7 @@ public class GPSTileMap extends JFrame implements ActionListener {
       double total = 0;
       for (GPSMap.Waypoint way : gpsMap.markSet.waypoints) {
         if (lastWay != null) {
-            double lat1 = GPSMap.degreesToRadians(lastWay.latLon.lat);
-            double lon1 = GPSMap.degreesToRadians(lastWay.latLon.lon);
-            double lat2 = GPSMap.degreesToRadians(way.latLon.lat);
-            double lon2 = GPSMap.degreesToRadians(way.latLon.lon);
-            double dist = Math.acos(Math.sin(lat1) * Math.sin(lat2) + Math.cos(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1))* 6371;
-            double feet = dist * 3280.8;
+            double feet = GPSMap.distanceInFeet(lastWay.loc, way.loc);
             total += feet;
             buf.append("Distance from waypoint ").append(ii).append(" to waypoint ").append(ii + 1).
                 append(" is ").append(GPSMap.feetFmt.format(feet)).append(" feet\n");
@@ -1970,18 +2247,18 @@ public class GPSTileMap extends JFrame implements ActionListener {
               int mapHeight = GPSMap.zoomLevels[2].height;
               int tileSize = GPSMap.imgTileSize;
               int zoom = GPSMap.MaxZoom;
-              GPSMap.MapSet mapSet = new GPSMap.MapSet(name, toDouble(lat.getText()), toDouble(lon.getText()));
+              GPSMap.MapSet mapSet = new GPSMap.MapSet(name, new LonLat(toDouble(lon.getText()), toDouble(lat.getText())));
               // Build Fully Zoomed Map image from Google Static Maps image tiles (other built by scaling down this image)
               int totalTiles = (mapWidth / tileSize) * (mapHeight / tileSize);
               int tileCount = 0;
               List<BufferedImage> tmp = new ArrayList<>();
               for (int xx = 0; xx < mapWidth; xx += tileSize) {
                 for (int yy = 0; yy < mapHeight; yy += tileSize) {
-                  double cLat = GPSMap.pixelYToLat(mapSet.pixLat[2] + yy + 256 - mapHeight / 2, zoom);
-                  double cLon = GPSMap.pixelXToLon(mapSet.pixLon[2] + xx + 256 - mapWidth / 2, zoom);
+                  Point pLoc = new Point(mapSet.mapLoc[2].x + xx + 256 - mapWidth / 2, mapSet.mapLoc[2].y + yy + 256 - mapHeight / 2);
+                  LonLat loc = GPSMap.pixelToLonLat(pLoc,  zoom);
                   try {
                     String url = "http://maps.googleapis.com/maps/api/staticmap?center=" +
-                                  GPSMap.formatLatLon(cLat) + "," + GPSMap.formatLatLon(cLon) + "&zoom=" + (zoom) +
+                                  GPSMap.lonLatFmt.format(loc.lat) + "," + GPSMap.lonLatFmt.format(loc.lon) + "&zoom=" + (zoom) +
                                   "&size=512x512&sensor=false&maptype=satellite" + (mapKey != null ? "&key=" + mapKey : "");
                     tileCount++;
                     int percent = (int) (((double) tileCount / (double) totalTiles) * 99);
