@@ -158,8 +158,8 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
 
     public MyToolBar () {
       super();
-      add(getButton("arrow",    "arrow.png",      "Move",         "Move Marker"));
-      add(getButton("hand",     "hand.png",       "Drag",         "Drag Map", true));
+      add(getButton("arrow",    "arrow.png",      "Move",         "Move Marker", true));
+      add(getButton("hand",     "hand.png",       "Drag",         "Drag Map"));
       add(getButton("cross",    "crosshair.png",  "Crosshair",    "GPS Coords"));
       add(getButton("tape",     "tape.png",       "Tape",         "Measure Distancee"));
       add(getButton("magnifier","magnifier.gif",  "Edit",         "Edit Waypoint or GPS Reference"));
@@ -648,6 +648,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       private double    scale = 1.0, angle, saveAngle;
       private double    maxSteer = 30, maxSpeed;
       private double    speed, accel, decel;
+      private int       wayIdx = 1;
 
       private class CarShape extends Polygon {
         private CarShape () {
@@ -680,13 +681,14 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         super(loc, 30);
         saveLoc = loc.copy();
         decel = accel = 0.0000057419 / 200;
-        maxSpeed = 0.0000057419 / 5;
+        maxSpeed = 0.0000057419 / 3;
       }
 
       public void reset () {
         loc = saveLoc.copy();
         angle = saveAngle;
         speed = 0;
+        wayIdx = 1;
       }
 
       public void doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2) {
@@ -1365,7 +1367,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
 
     public void setMap (MapSet mapSet) {
       this.mapSet = mapSet;
-      setTool("hand");
+      setTool("arrow");
       screenRotate = prefs.getBoolean("rotate.on", false);
       showMarkers = prefs.getBoolean("markers.on", true);
       moveMarkers = prefs.getBoolean("move_markers.on", false);
@@ -1651,25 +1653,29 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       return;
     }
     try {
-      LonLat[] locWays = new LonLat[gpsMap.markSet.waypoints.size() + 1];
-      locWays[0] = gpsMap.markSet.simCar.loc;
-      int ii = 1;
-      for (GPSTileMap.GPSMap.Waypoint wPnt : gpsMap.markSet.waypoints) {
-        locWays[ii++] = wPnt.loc;
-      }
-      int wayIdx = 1;
-      while (simRun) {
-        // Drive autonomous
-        if (gpsMap.markSet.simCar.doMove(locWays[wayIdx], locWays[wayIdx - 1], simRun)) {
-          wayIdx++;
-          if (wayIdx > gpsMap.markSet.waypoints.size()) {
+      GPSMap.MarkSet markSet = gpsMap.markSet;
+      boolean nextWayPoint = false;
+      while (simRun || markSet.simCar.speed > 0) {
+        // Update waypoint positions (allows user to move Waypoints while sim runs)
+        LonLat[] locWays = new LonLat[markSet.waypoints.size() + 1];
+        locWays[0] = markSet.simCar.loc;
+        int ii = 1;
+        for (GPSTileMap.GPSMap.Waypoint wPnt : markSet.waypoints) {
+          locWays[ii++] = wPnt.loc;
+        }
+        if (nextWayPoint && simRun) {
+          // Check if we've reached last waypoint
+          if (++markSet.simCar.wayIdx >= locWays.length) {
             simRun = false;
-            runStop.setText("RUN");
+            markSet.simCar.wayIdx = locWays.length - 1;
           }
         }
+        // Drive autonomous
+        nextWayPoint = markSet.simCar.doMove(locWays[markSet.simCar.wayIdx], locWays[markSet.simCar.wayIdx - 1], simRun);
         repaint();
         Thread.sleep(20);   // ~50 fps
       }
+      runStop.setText("RUN");
     } catch (Exception ex) {
       ex.printStackTrace(System.out);
     }
