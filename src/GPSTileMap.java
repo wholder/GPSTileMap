@@ -227,7 +227,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     private static final int      tileSize = 256, imgTileSize = 512;
     private static final double   pixelsPerLonDegree = tileSize / 360.0;
     private static final double   pixelsPerLonRadian = tileSize / (2.0 * Math.PI);
-    private static final double   origin = tileSize / 2.0;
+    private static final double   originX = tileSize / 2.0, originY = tileSize / 2.0;
     private static final int      BaseZoom = 19;
     private static final int      MaxZoom = 21;
     private static Dimension[]    zoomLevels = {new Dimension(2048, 2048), new Dimension(4096, 4096), new Dimension(8192, 8192)};
@@ -680,8 +680,8 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       public SimCar (LonLat loc) {
         super(loc, 30);
         saveLoc = loc.copy();
-        decel = accel = 0.0000057419 / 200;
-        maxSpeed = 0.0000057419 / 3;
+        decel = accel = 0.0000057419 / 150;
+        maxSpeed = 0.0000057419 / 4;
       }
 
       public void reset () {
@@ -700,7 +700,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         double dScale = scale / div;
         at.scale(dScale, dScale);
         g2.setStroke(new BasicStroke(2.0f / div));
-        g2.setColor(Color.WHITE);
+        g2.setColor(Color.GREEN);
         g2.fill(at.createTransformedShape(carShape));
         g2.setStroke(new BasicStroke(1.0f / div));
         g2.setColor(Color.BLACK);
@@ -1519,21 +1519,21 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
      */
 
     private static double worldXToLon (double worldX) {
-      return (worldX - origin) / pixelsPerLonDegree;
+      return (worldX - originX) / pixelsPerLonDegree;
     }
 
     private static double worldYToLat (double worldY) {
-      double latRadians = (worldY - origin) / -pixelsPerLonRadian;
+      double latRadians = (worldY - originY) / -pixelsPerLonRadian;
       return GPSMap.radiansToDegrees(2.0 * Math.atan(Math.exp(latRadians)) - Math.PI / 2);
     }
 
     private static double lonToWorldX (double lon) {
-      return origin + lon * pixelsPerLonDegree;
+      return originX + lon * pixelsPerLonDegree;
     }
 
     private static double latToWorldY (double lat) {
       double sinY = Math.sin(degreesToRadians(lat));
-      return origin + 0.5 * Math.log((1.0 + sinY) / (1.0 - sinY)) * -pixelsPerLonRadian;
+      return originY + 0.5 * Math.log((1.0 + sinY) / (1.0 - sinY)) * -pixelsPerLonRadian;
     }
 
     private static double degreesToRadians (double deg) {
@@ -1670,8 +1670,14 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
             markSet.simCar.wayIdx = locWays.length - 1;
           }
         }
+        LonLat prevLoc = markSet.simCar.loc.copy();
         // Drive autonomous
         nextWayPoint = markSet.simCar.doMove(locWays[markSet.simCar.wayIdx], locWays[markSet.simCar.wayIdx - 1], simRun);
+        LonLat nextLoc = markSet.simCar.loc.copy();
+        // Calculate distance moved (in feet)
+        double feet = GPSMap.distanceInFeet(prevLoc, nextLoc);
+        gpsMap.toolInfo.setText("" + GPSMap.feetFmt.format(feet * 50) + " feet/sec");
+        // Update screen and wait for next animation tick
         repaint();
         Thread.sleep(20);   // ~50 fps
       }
@@ -1689,6 +1695,8 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         throw new IllegalStateException("Unable to create directory " + userDir);
       }
     }
+    //System.out.println("" + Math.abs(GPSMap.lonToWorldX(-0.5) - GPSMap.lonToWorldX(0.5)));
+    //System.out.println("" + Math.abs(GPSMap.latToWorldY(-0.5) - GPSMap.latToWorldY(0.5)));
     setBackground(Color.white);
     setLayout(new BorderLayout(1, 1));
     MyToolBar toolBar = new MyToolBar();
