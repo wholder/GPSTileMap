@@ -63,6 +63,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
   private static String       userDir = System.getProperty("user.home") + "/Library/" + GPSTileMap.class.getName();
   private JMenuBar            menuBar;
   private GPSMap              gpsMap;
+  private CarLink             carLink;
   private JMenu               fileMenu;
   private JMenu               zoomMenu;
   private JMenu               optMenu;
@@ -337,6 +338,9 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         maps = new Image[3];
         ByteArrayInputStream bin = new ByteArrayInputStream(imgData);
         maps[2] = ImageIO.read(bin);
+        //FileOutputStream fOut = new FileOutputStream("/Users/wholder/Desktop/map.png");
+        //fOut.write(imgData);
+        //fOut.close();
       }
 
       private Image getMap (int zoom) {
@@ -1637,12 +1641,12 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
               }
             }
           } catch (jssc.SerialPortException ex) {
-            ex.printStackTrace(System.out);
+            showErrorDialog("Error Sending to Serial Port " + jsscPort.getPortName());
           }
         });
         timer.start();
       } catch (jssc.SerialPortException ex) {
-        ex.printStackTrace(System.out);
+        showErrorDialog("Error Opening Serial Port " + jsscPort.getPortName());
       }
     }
   }
@@ -1684,6 +1688,37 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       runStop.setText("RUN");
     } catch (Exception ex) {
       ex.printStackTrace(System.out);
+    }
+  }
+
+  public static class CarLink extends JPanel {
+    CarLink () {
+      // Add code here to communicate with car and configure settings
+      // Possible parameters:
+      //    Max Steering (angle)
+      //    Steering Algorithm (may have subpanel for related options)
+      //    Intercept Circle Radius
+      //    Waypoint Turn Distance
+      //    Odometry Calibration Value
+      //    Compass Calibration Values (read only)
+      //    Acceleration, Deceleration settings for SimCar
+      //    IMU and Compass Realtime Readout
+
+    }
+
+    public void paint (Graphics g) {
+      String text = "Coming Soon";
+      Dimension win = getSize();
+      Font font = new Font("Helevetica", Font.BOLD, 30);
+      FontMetrics fm = g.getFontMetrics(font);
+      java.awt.geom.Rectangle2D rect = fm.getStringBounds(text, g);
+      int tWid = (int) rect.getWidth();
+      int tHyt = (int) rect.getHeight();
+      g.setFont(font);
+      int dx = win.width / 2 - tWid / 2;
+      int dy = win.height / 2 - tHyt / 2 + fm.getAscent();
+      g.setColor(Color.lightGray);
+      g.drawString(text, dx, dy);
     }
   }
 
@@ -1750,7 +1785,31 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         prefs.remove("default.map");
       }
     }
-    add("Center", toolPanel);
+    JTabbedPane tabs = new JTabbedPane();
+    tabs.addTab("Map", toolPanel);
+    tabs.addTab("CarLink", carLink = new CarLink());
+    add("Center", tabs);
+    tabs.addChangeListener(ev -> {
+      JTabbedPane src = (JTabbedPane)ev.getSource();
+      Component selected = src.getSelectedComponent();
+      try {
+        if (selected == toolPanel) {
+          fileMenu.setVisible(true);
+          zoomMenu.setVisible(true);
+          optMenu.setVisible(true);
+          waypointMenu.setVisible(true);
+          settingsMenu.setVisible(true);
+          bumpMenu.setVisible(true);
+        } else {
+          fileMenu.setVisible(false);
+          zoomMenu.setVisible(false);
+          optMenu.setVisible(false);
+          waypointMenu.setVisible(false);
+          settingsMenu.setVisible(false);
+          bumpMenu.setVisible(false);
+        }
+      } catch (Exception ex) {
+      }});
     // Add menu bar and menus
     menuBar = new JMenuBar();
     // Add File menu
