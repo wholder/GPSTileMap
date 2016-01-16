@@ -756,7 +756,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
           speed = Math.max(0, speed - decel);
         }
         // See if car has reached next waypoint
-        double remDist = Point2D.distance(position.x, position.y, wayPnt.x, wayPnt.y);
+        double remDist = distanceToGoal(prevWay, wayPnt, position);
         return remDist < wayRadius;
       }
 
@@ -766,12 +766,19 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
 
       /**
-       * Line/Circle Intersection
-       * @param a previous waypoint
-       * @param b current waypoint
-       * @param c position of Car
-       * @param radius radious of circle to intersect with line drawn from a to b
-       * @return array of points (len 1 if intersection found, else 3)
+       * Computes the two intersection points between a circle of a defined radius around point c
+       * and a line drawn though two points, a and b, and/or the tangent point closest to the line
+       * from point c.
+       * @param a Starting point
+       * @param b Destination point
+       * @param c Location of Car
+       * @param radius radius of intersect circle
+       * @return Point[3] size array, where:
+       *          Point[0] is circle intesection closest to Starting point
+       *          Point[1] is circle intesection closest to Ending point
+       *          Point[2] is tangent point on line
+       *  or Point[1] size array, where
+       *          Point[0] is tangent point on line
        */
       private Point2D.Double[] intersect (Point2D.Double a, Point2D.Double b, Point2D.Double c, double radius) {
         double dx1 = b.x - a.x;
@@ -801,6 +808,23 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
         // tangent point to circle is E
         return new Point2D.Double[] {new Point2D.Double(ex, ey),};
+      }
+
+      /**
+       * Compute distance to goal as (dist from a to b) - (dist from a to t)
+       * @param a Starting point
+       * @param b Destination point
+       * @param c Location of Car
+       * @return postive dstance to goal, or negative distance past goal
+       */
+      private static double distanceToGoal (Point.Double a, Point.Double b, Point.Double c) {
+        double dx1 = b.x - a.x;
+        double dy1 = b.y - a.y;
+        double dst1 = Math.sqrt(dx1 * dx1 + dy1 * dy1);
+        double dx2 = a.x - c.x;
+        double dy2 = a.y - c.y;
+        double dst2 = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+        return dst1 - dst2;
       }
 
       private double angleTo (Point2D.Double car, Point2D.Double way) {
