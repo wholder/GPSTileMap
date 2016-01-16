@@ -62,6 +62,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
   private static String       osName = System.getProperty("os.name").toLowerCase();
   private static String       userDir = System.getProperty("user.home") + "/Library/" + GPSTileMap.class.getName();
   private JMenuBar            menuBar;
+  private JTabbedPane         tabs;
   private GPSMap              gpsMap;
   private CarLink             carLink;
   private JMenu               fileMenu;
@@ -1710,6 +1711,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         Thread.sleep(20);   // ~50 fps
       }
       runStop.setText("RUN");
+      tabs.setEnabledAt(1, true);
     } catch (Exception ex) {
       ex.printStackTrace(System.out);
     }
@@ -1768,10 +1770,12 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       if ("RUN".equals(runStop.getText())) {
         runStop.setText("STOP");
         simRun = true;
+        tabs.setEnabledAt(1, false);
         (new Thread(this)).start();
       } else {
         runStop.setText("RUN");
         simRun = false;
+        tabs.setEnabledAt(1, true);
       }
     });
     toolBar.add(runStop);
@@ -1809,7 +1813,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         prefs.remove("default.map");
       }
     }
-    JTabbedPane tabs = new JTabbedPane();
+    tabs = new JTabbedPane();
     tabs.addTab("Map", toolPanel);
     tabs.addTab("CarLink", carLink = new CarLink());
     add("Center", tabs);
@@ -1833,6 +1837,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
           bumpMenu.setVisible(false);
         }
       } catch (Exception ex) {
+        ex.printStackTrace(System.out);
       }});
     // Add menu bar and menus
     menuBar = new JMenuBar();
