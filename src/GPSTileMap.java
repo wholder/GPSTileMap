@@ -1,4 +1,5 @@
 import d3.env.TSAGeoMag;
+import jssc.SerialPortException;
 
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -109,16 +110,16 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     }
   }
 
-  public static class LonLat implements Serializable {
+  static class LonLat implements Serializable {
     private static final long serialVersionUID = 7686575451237322227L;
     double                    lon, lat;
 
-    public LonLat (double lon, double lat) {
+    LonLat (double lon, double lat) {
       this.lon = lon;
       this.lat = lat;
     }
 
-    public LonLat copy () {
+    LonLat copy () {
       return new LonLat(lon, lat);
     }
   }
@@ -126,7 +127,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
   public static class MyFileFilter extends FileFilter {
     private String  ext;
 
-    public MyFileFilter (String ext) {
+    MyFileFilter (String ext) {
       this.ext = ext;
     }
 
@@ -134,7 +135,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       return file.isDirectory() || ext.equals(getExtension(file));
     }
 
-    public static String getExtension (File file) {
+    static String getExtension (File file) {
       String ext = null;
       String name = file.getName();
       int ii = name.lastIndexOf('.');
@@ -158,7 +159,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     private String      state;
     private GPSMap      gpsMap;
 
-    public MyToolBar () {
+    MyToolBar () {
       super();
       add(getButton("arrow",    "arrow.png",      "Move",         "Move Marker", true));
       add(getButton("hand",     "hand.png",       "Drag",         "Drag Map"));
@@ -176,11 +177,11 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       setFloatable(false);
     }
 
-    protected JRadioButton getButton (String cmd, String img, String altText, String toolTip) {
+    JRadioButton getButton (String cmd, String img, String altText, String toolTip) {
       return getButton(cmd, img, toolTip, altText, false);
     }
 
-    protected JRadioButton getButton (String cmd, String img, String toolTip, String altText, boolean select) {
+    JRadioButton getButton (String cmd, String img, String toolTip, String altText, boolean select) {
       URL imageURL = getClass().getResource("/images/" + img);
       JRadioButton button;
       if (imageURL != null) {
@@ -215,7 +216,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       but.setBackground(but.isSelected() ? Color.GRAY : Color.WHITE);
     }
 
-    public void registerGPSMap (GPSMap gpsMap) {
+    void registerGPSMap (GPSMap gpsMap) {
       this.gpsMap = gpsMap;
     }
   }
@@ -246,7 +247,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     private Point                 tapeStart, tapeEnd;
     private String                tool;
     private Drawable              selected;
-    protected Settings            settings = new Settings();
+    Settings                      settings = new Settings();
     private transient Preferences prefs;
     private transient GPSTileMap  gpsTileMap;
 
@@ -283,7 +284,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       private byte[]              imgData;
       private LonLat              loc;
 
-      public MapSet (String name, LonLat loc) {
+      MapSet (String name, LonLat loc) {
         this.name = name;
         this.loc = loc;
         // Setup offsets for different zoom levels
@@ -294,7 +295,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      public double getDeclination () {
+      double getDeclination () {
         if (magModel != null) {
           Calendar cal = Calendar.getInstance();
           int year = cal.get(Calendar.YEAR);
@@ -305,14 +306,14 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         return 0;
       }
 
-      public static MapSet loadMapSet (String name) throws IOException, ClassNotFoundException {
+      static MapSet loadMapSet (String name) throws IOException, ClassNotFoundException {
         File fName = new File(userDir + "/" + name + ".map");
         FileInputStream fileIn = new FileInputStream(fName);
         ObjectInputStream in = new ObjectInputStream(fileIn);
         return (MapSet) in.readObject();
      }
 
-      public void saveMapSet () throws IOException {
+      void saveMapSet () throws IOException {
         getMap(MaxZoom);
         File fName = new File(userDir + "/" + name + ".map");
         if (!fName.exists()) {
@@ -382,7 +383,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         waypoints = new ArrayList<>();
       }
 
-      public static MarkSet load (String name) {
+      static MarkSet load (String name) {
         String fName = userDir + "/" + name + ".mrk";
         try {
           File file = new File(fName);
@@ -399,7 +400,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      public void save () {
+      void save () {
         String fName = userDir + "/" + name + ".mrk";
         try {
           File file = new File(fName);
@@ -413,7 +414,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      public void resetMarkers () {
+      void resetMarkers () {
         // Set markers to position values published by Sparkfun for AVC 2013
         markers = new ArrayList<>();
         /*
@@ -434,7 +435,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         */
       }
 
-      public void loadMarkers (String data) {
+      void loadMarkers (String data) {
         markers = new ArrayList<>();
         StringTokenizer tok = new StringTokenizer(data, "\n\r");
         while (tok.hasMoreTokens()) {
@@ -458,7 +459,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      public void saveMarkers (File save) {
+      void saveMarkers (File save) {
         try {
           FileOutputStream fOut = new FileOutputStream(save);
           PrintWriter pOut = new PrintWriter(fOut);
@@ -533,38 +534,38 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       CIRCLE, RECT, HOOP, POLY, POLYCLOSE, POLYEND, GPSREF
     }
 
-    public static class Marker extends Drawable implements Serializable {
+    static class Marker extends Drawable implements Serializable {
       private static final long  serialVersionUID = 7626575480447322227L;
       private MarkerType  type;
       private int         rotation;   // degrees (0-359)
-      protected Color     color;
+      Color               color;
       private boolean     hasRotation;
 
-      public Marker (MarkerType type, LonLat loc, int diameter, Color color) {
+      Marker (MarkerType type, LonLat loc, int diameter, Color color) {
         super(loc, diameter);
         this.type = type;
         this.color = color;
       }
 
-      public Marker (MarkerType type, LonLat loc, int diameter, Color color, int rotation) {
+      Marker (MarkerType type, LonLat loc, int diameter, Color color, int rotation) {
         this(type, loc, diameter, color);
         this.rotation = rotation;
         hasRotation = true;
       }
 
-      public Marker (boolean closed) {
+      Marker (boolean closed) {
         super(new LonLat(0, 0), 0);
         type = closed ? MarkerType.POLYCLOSE : MarkerType.POLYEND;
       }
 
-      public void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
+      void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
         if (hasRotation) {
           Point mLoc = gpsMap.getMapLoc(loc);
           rotation = (int) Math.toDegrees(Math.toRadians(180) - Math.atan2(x - mLoc.x, y - mLoc.y)) % 360;
         }
       }
 
-      protected Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Object[] ret) {
+      Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Object[] ret) {
         // Note: convert diameter from inches to pixels using factor of 2.2463006662281613 inches/pixel at zoom == 21
         int dia = (int) ((double) diameter / 2.2463006662281613) / (22 - gpsMap.zoom);
         g2.setColor(color);
@@ -629,24 +630,24 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
     }
 
-    abstract public static class Drawable implements Serializable {
+    abstract static class Drawable implements Serializable {
       private static final long serialVersionUID = 7586575480447322227L;
-      protected static Stroke[] thick = {new BasicStroke(3.0f), new BasicStroke(2.0f), new BasicStroke(1.0f)};
-      protected LonLat          loc;
-      protected int             diameter;
+      static Stroke[] thick = {new BasicStroke(3.0f), new BasicStroke(2.0f), new BasicStroke(1.0f)};
+      LonLat          loc;
+      int             diameter;
 
-      public Drawable (LonLat loc, int diameter) {
+      Drawable (LonLat loc, int diameter) {
         this.loc = loc;
         this.diameter = diameter;
       }
 
-      public boolean selects (GPSTileMap.GPSMap gpsMap, int x, int y) {
+      boolean selects (GPSTileMap.GPSMap gpsMap, int x, int y) {
         Point mLoc = gpsMap.getMapLoc(loc);
         return (int) Math.sqrt(Math.pow((double) mLoc.x - x, 2) + Math.pow((double) mLoc.y - y, 2)) < diameter / (22 - gpsMap.zoom);
       }
     }
 
-    public static class SimCar extends Drawable implements Serializable {
+    static class SimCar extends Drawable implements Serializable {
       private static final long serialVersionUID = 7686215450217322227L;
       private CarShape  carShape = new CarShape();
       private LonLat    saveLoc;
@@ -682,21 +683,21 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      public SimCar (LonLat loc) {
+      SimCar (LonLat loc) {
         super(loc, 30);
         saveLoc = loc.copy();
         decel = accel = 0.0000057419 / 150;
         maxSpeed = 0.0000057419 / 4;
       }
 
-      public void reset () {
+      void reset () {
         loc = saveLoc.copy();
         angle = saveAngle;
         speed = 0;
         wayIdx = 1;
       }
 
-      public void doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2) {
+      void doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2) {
         Point mLoc = gpsMap.getMapLoc(loc);
         // Rotate car shape to reflect steering angle and draw
         AffineTransform at = AffineTransform.getTranslateInstance(mLoc.x, mLoc.y);
@@ -717,7 +718,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
        * @param simRun true if simulation is enabled
        * @return true if car has reached next waypoint
        */
-      public boolean doMove (LonLat wayLon, LonLat prevLon, boolean simRun) {
+      boolean doMove (LonLat wayLon, LonLat prevLon, boolean simRun) {
         // Convert LonLat Coords into World Coordinates
         Point.Double prevWay = lonLatToWorld(prevLon);
         Point.Double wayPnt = lonLatToWorld(wayLon);
@@ -761,7 +762,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         return remDist < wayRadius;
       }
 
-      public void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
+      void doRotate (GPSTileMap.GPSMap gpsMap, int x, int y) {
         Point mLoc = gpsMap.getMapLoc(loc);
         saveAngle = angle = Math.toDegrees(Math.toRadians(180) - Math.atan2(x - mLoc.x, y - mLoc.y)) % 360.0;
       }
@@ -862,18 +863,18 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
     }
 
-    public static class Waypoint extends Drawable implements Serializable {
+    static class Waypoint extends Drawable implements Serializable {
       private static final long  serialVersionUID = 7686575480337322227L;
-      protected String   sel;
-      protected boolean  avoidBarrels, jumpRamp, raiseFlag;
-      protected int      heading;
+      String   sel;
+      boolean  avoidBarrels, jumpRamp, raiseFlag;
+      int      heading;
 
-      public Waypoint (LonLat loc, String sel) {
+      Waypoint (LonLat loc, String sel) {
         super(loc, 25);
         this.sel = sel;
       }
 
-      protected Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Waypoint way, int num, Object[] ret) {
+      Object[] doDraw (GPSTileMap.GPSMap gpsMap, Graphics2D g2, Waypoint way, int num, Object[] ret) {
         int dia = diameter / (22 - gpsMap.zoom);
         int hDia = dia / 2;
         g2.setColor(Color.WHITE);
@@ -916,35 +917,35 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
     }
 
-    public static class GPSReference extends Marker implements Serializable {
+    static class GPSReference extends Marker implements Serializable {
       private static final long     serialVersionUID = 7686575480447322227L;
       private double  refLat, refLon;
 
-      public GPSReference (LonLat loc) {
+      GPSReference (LonLat loc) {
         super(MarkerType.GPSREF, loc, 20, Color.ORANGE);
       }
 
-      public void setLoc (double refLat, double refLon) {
+      void setLoc (double refLat, double refLon) {
         this.refLat = refLat;
         this.refLon = refLon;
       }
 
-      public int getDeltaLat () {
+      int getDeltaLat () {
         return toFixed(refLat - loc.lat);
       }
 
-      public int getDeltaLon () {
+      int getDeltaLon () {
         return toFixed(refLon - loc.lon);
       }
    }
 
-    public static class Settings implements Serializable {
+    static class Settings implements Serializable {
       private static final long     serialVersionUID = 7686575480447311127L;
-      protected Map<String,Integer> wayVals;
-      protected Map<Integer,String> wayDesc;
-      protected String              wayDefault;
+      Map<String,Integer> wayVals;
+      Map<Integer,String> wayDesc;
+      String              wayDefault;
 
-      protected Settings () {
+      Settings () {
         wayVals = new LinkedHashMap<>();
         wayVals.put("Stop", 0);
         wayVals.put("Slow", 1);
@@ -962,19 +963,19 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         }
       }
 
-      protected String getDesc (int code) {
+      String getDesc (int code) {
         return wayDesc.get(code);
       }
 
-      protected int getCode (String desc) {
+      int getCode (String desc) {
         return wayVals.containsKey(desc) ? wayVals.get(desc) : 0;
       }
 
-      protected String getDefault () {
+      String getDefault () {
         return wayDefault;
       }
 
-      protected void setDefault (String wayDefault) {
+      void setDefault (String wayDefault) {
         this.wayDefault = wayDefault;
       }
 
@@ -1006,7 +1007,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
 
     // Utility methods
 
-    public Drawable findDrawable (int x, int y) {
+    Drawable findDrawable (int x, int y) {
       for (Drawable mrk : markSet.waypoints) {
         if (mrk.selects(this, x, y)) {
           return mrk;
@@ -1026,7 +1027,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       return null;
     }
 
-    public boolean touches (Drawable mrk, int x, int y) {
+    boolean touches (Drawable mrk, int x, int y) {
       return mrk != null && mrk.selects(this, x, y);
     }
 
@@ -1034,7 +1035,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       mrk.loc = getMapLonLat(x, y);
     }
 
-    public void setTool (String tool) {
+    void setTool (String tool) {
       this.tool = tool;
       if ("hand".equals(tool)) {
         setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
@@ -1049,7 +1050,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       return val != null  &&  val.length() > 0;
     }
 
-    public Point rotate (Point pos) {
+    Point rotate (Point pos) {
       if (screenRotate) {
         pos.x = win.width - pos.x;
         pos.y = win.height - pos.y;
@@ -1303,7 +1304,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
     }
 
-    public GPSMap (GPSTileMap gpsTileMap, Preferences prefs, JTextField toolInfo) {
+    GPSMap (GPSTileMap gpsTileMap, Preferences prefs, JTextField toolInfo) {
       this.gpsTileMap = gpsTileMap;
       this.prefs = prefs;
       this.toolInfo = toolInfo;
@@ -1315,7 +1316,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       zoom = prefs.getInt("window.zoom", 20);
     }
 
-    public void changeZoom (int newZoom) {
+    void changeZoom (int newZoom) {
       int oldIdx = zoom - BaseZoom;
       int newIdx = newZoom - BaseZoom;
       int hWid = win.width / 2;
@@ -1332,41 +1333,42 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       prefs.putInt("window.offY", offY);
     }
 
-    protected Point getMapLoc (LonLat loc) {
+    Point getMapLoc (LonLat loc) {
       Point pLoc = lonLanToPixel(loc, zoom);
       return new Point(pLoc.x - (mapSet.getUlLoc(zoom).x + offX), pLoc.y - (mapSet.getUlLoc(zoom).y + offY));
     }
 
-    protected LonLat getMapLonLat (int mx, int my) {
+    LonLat getMapLonLat (int mx, int my) {
       Point pLoc = new Point(mapSet.getUlLoc(zoom).x + offX + mx, mapSet.getUlLoc(zoom).y + offY + my);
       return GPSMap.pixelToLonLat(pLoc,  zoom);
     }
 
-    private void saveObject (String name, Object obj) {
+    void persistSettings () {
+      // Save markers into persistent preference data
       try {
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         ObjectOutputStream out = new ObjectOutputStream(bout);
-        out.writeObject(obj);
-        prefs.putByteArray(name, bout.toByteArray());
+        out.writeObject(settings);
+        prefs.putByteArray("settings", bout.toByteArray());
       } catch (Exception ex) {
         ex.printStackTrace(System.out);
       }
     }
 
-    public void resetSettings () {
+    void resetSettings () {
       settings = new Settings();
       persistSettings();
       clearWaypoints();
     }
 
 
-    public void saveSettings (String data) {
+    void saveSettings (String data) {
       settings.setSettings(data);
       persistSettings();
       clearWaypoints();
     }
 
-    public void initSettiings () {
+    void initSettiings () {
       byte[] tmp = prefs.getByteArray("settings", null);
       if (tmp != null) {
         try {
@@ -1380,21 +1382,16 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
     }
 
-    public void persistSettings () {
-      // Save markers into persistent preference data
-      saveObject("settings", settings);
-    }
-
-    public void clearWaypoints () {
+    void clearWaypoints () {
       markSet.clearWaypoints();
       repaint();
     }
 
-    public void loadMap (String mapName) throws Exception {
+    void loadMap (String mapName) throws Exception {
       setMap(GPSMap.MapSet.loadMapSet(mapName));
     }
 
-    public void setMap (MapSet mapSet) {
+    void setMap (MapSet mapSet) {
       this.mapSet = mapSet;
       setTool("arrow");
       screenRotate = prefs.getBoolean("rotate.on", false);
@@ -1459,7 +1456,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       g.drawImage(offScr, 0, 0, this);
     }
 
-    public String[] getUploadData () {
+    String[] getUploadData () {
       List<String> lines = new ArrayList<>();
       lines.add("z\n\r");
       // Send Map's declination value to car
@@ -1518,7 +1515,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
      * GPSTileMap Utility Mehods
      */
 
-    public static int toFixed (double val) {
+    static int toFixed (double val) {
       return (int) (val * 10000000.0);
     }
 
@@ -1748,7 +1745,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     }
   }
 
-  GPSTileMap () {
+  private GPSTileMap () {
     super("GPS Tile Map");
     File uDir = new File(userDir);
     if (!uDir.exists()) {
@@ -2162,26 +2159,23 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         System.exit(0);
       }
     });
-    Runtime.getRuntime().addShutdownHook(new Thread() {
-      @Override
-      public void run() {
-        if (jsscPort != null) {
-          try {
-            jsscPort.closePort();
-          } catch (jssc.SerialPortException ex) {
-            ex.printStackTrace(System.out);
-          }
-        }
-        if (gpsMap.markSet != null) {
-          gpsMap.markSet.save();
-        }
+    Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+      if (jsscPort != null) {
         try {
-          prefs.flush();
-        } catch (BackingStoreException ex) {
+          jsscPort.closePort();
+        } catch (SerialPortException ex) {
           ex.printStackTrace(System.out);
         }
       }
-    });
+      if (gpsMap.markSet != null) {
+        gpsMap.markSet.save();
+      }
+      try {
+        prefs.flush();
+      } catch (BackingStoreException ex) {
+        ex.printStackTrace(System.out);
+      }
+    }));
     // Track window resize/move events and save in prefs
     addComponentListener(new ComponentAdapter() {
       public void componentMoved (ComponentEvent ev)  {
@@ -2212,7 +2206,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     bumpKeywords.put("RESUME",  0x6000);
   }
   
-  byte check;
+  private byte check;
   
   private String toHexByte(int val, int digits) {
     StringBuilder buf = new StringBuilder();

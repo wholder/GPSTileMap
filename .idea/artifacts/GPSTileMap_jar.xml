@@ -1,5 +1,5 @@
 <component name="ArtifactManager">
-  <artifact type="jar" name="GPSTileMap:jar">
+  <artifact type="jar" build-on-make="true" name="GPSTileMap:jar">
     <output-path>$PROJECT_DIR$/out/artifacts/GPSTileMap_jar</output-path>
     <root id="archive" name="GPSTileMap.jar">
       <element id="module-output" name="GPSTileMap" />
