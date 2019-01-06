@@ -1598,11 +1598,11 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
      */
     private static double distanceInKilometers (LonLat loc1, LonLat loc2) {
       // Haversine formula
-      double φ1 = degreesToRadians(loc1.lat);
-      double φ2 = degreesToRadians(loc2.lat);
-      double Δφ = degreesToRadians(loc2.lat - loc1.lat);
-      double Δλ = degreesToRadians(loc2.lon - loc1.lon);
-      double a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
+      double phi1 = degreesToRadians(loc1.lat);
+      double phi2 = degreesToRadians(loc2.lat);
+      double deltaPhi = degreesToRadians(loc2.lat - loc1.lat);
+      double deltaLam = degreesToRadians(loc2.lon - loc1.lon);
+      double a = Math.sin(deltaPhi/2) * Math.sin(deltaPhi/2) + Math.cos(phi1) * Math.cos(phi2) * Math.sin(deltaLam/2) * Math.sin(deltaLam/2);
       // Note: Radius of Earh in kilometers is 6371
       return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)) * 6371;
     }
