@@ -14,6 +14,7 @@ import java.awt.geom.Point2D;
 import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemException;
 import java.text.DecimalFormat;
 import java.util.*;
@@ -57,9 +58,9 @@ import java.util.prefs.Preferences;
 public class GPSTileMap extends JFrame implements ActionListener, Runnable {
   private static DecimalFormat declinationFmt = new DecimalFormat("#.#");
   private static char[]       hexVals = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-  private static int          OPEN_KEY  = KeyEvent.VK_O;
-  private static int          CREATE_KEY  = KeyEvent.VK_C;
-  private static int          QUIT_KEY  = KeyEvent.VK_Q;
+  private static final int    OPEN_KEY  = KeyEvent.VK_O;
+  private static final int    CREATE_KEY  = KeyEvent.VK_C;
+  private static final int    QUIT_KEY  = KeyEvent.VK_Q;
   private static String       osName = System.getProperty("os.name").toLowerCase();
   private static String       userDir = System.getProperty("user.home") + "/Library/" + GPSTileMap.class.getName();
   private JMenuBar            menuBar;
@@ -887,7 +888,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         g2.drawOval(mLoc.x - hDia, mLoc.y - hDia, dia, dia);
         StringBuilder buf = new StringBuilder();
         if (gpsMap.showNumbers)
-          buf.append(Integer.toString(num));
+          buf.append(num);
         if (gpsMap.showSettings) {
           if (gpsMap.showNumbers)
             buf.append("-");
@@ -968,7 +969,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
 
       int getCode (String desc) {
-        return wayVals.containsKey(desc) ? wayVals.get(desc) : 0;
+        return wayVals.getOrDefault(desc, 0);
       }
 
       String getDefault () {
@@ -1081,7 +1082,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
           toolInfo.setText(lonLatFmt.format(loc.lat) + ", " + lonLatFmt.format(loc.lon));
         } else if ("magnifier".equals(tool)) {
           Drawable mrk = findDrawable(mp.x, mp.y);
-          if (mrk != null  &&  mrk instanceof Waypoint) {
+          if (mrk instanceof Waypoint) {
             Waypoint way = (Waypoint) mrk;
             int num = markSet.waypoints.indexOf(way) + 1;
             JCheckBox chk1 = new JCheckBox("Avoid Barrels");
@@ -1092,7 +1093,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
             chk3.setSelected(way.raiseFlag);
             JTextField opt = new JTextField(Integer.toString(way.heading));
             Set<String> strings = settings.wayVals.keySet();
-            Object[] choices = strings.toArray(new String[strings.size()]);
+            Object[] choices = strings.toArray(new String[0]);
             Object[][] message;
             if (gpsTileMap.expertMode) {
               message = new Object[][]{{null, chk1}, {null, chk2}, {null, chk3}, {"Heading", opt}, {"Speed:"}};
@@ -1214,7 +1215,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
           }
         } else if ("tape".equals(tool)) {
           Drawable mkr = findDrawable(mp.x, mp.y);
-          if (mkr != null  &&  mkr instanceof Waypoint) {
+          if (mkr instanceof Waypoint) {
             boolean first = true;
             double feet = 0;
             LonLat lst = null;
@@ -1508,7 +1509,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       }
       // Send terminating line for Russ
       lines.add("!\n\r");
-      return lines.toArray(new String[lines.size()]);
+      return lines.toArray(new String[0]);
     }
 
     /*
@@ -1857,12 +1858,10 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     for (int ii = 0; ii < args.length; ii++) {
       String label = args[ii];
       JMenuItem mItem = new JMenuItem(label);
-      if (keys.length >= ii && keys[ii] > 0) {
-        if (osName.contains("windows")) {
-          mItem.setAccelerator(KeyStroke.getKeyStroke(keys[ii], InputEvent.CTRL_MASK));
-        } else if (osName.contains("mac")) {
-          mItem.setAccelerator(KeyStroke.getKeyStroke(keys[ii], InputEvent.META_MASK));
-        }
+      if (osName.contains("windows")) {
+        mItem.setAccelerator(KeyStroke.getKeyStroke(keys[ii], InputEvent.CTRL_MASK));
+      } else if (osName.contains("mac")) {
+        mItem.setAccelerator(KeyStroke.getKeyStroke(keys[ii], InputEvent.META_MASK));
       }
       fileMenu.add(mItem);
       mItem.addActionListener(this);
@@ -2257,7 +2256,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
         lines.add("<" + toHexByte(idx++, 2) + toHexByte(val, 4) + toHexByte(check, 2) + "\n\r");
       }
     }
-    return lines.toArray(new String[lines.size()]);
+    return lines.toArray(new String[0]);
   }
   
   private JMenu buildPortsMenu (GPSTileMap parent) {
@@ -2292,13 +2291,13 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
      throw new FileSystemException("Insufficient data");
    }
    fis.close();
-   return new String(data, "UTF8");
+   return new String(data, StandardCharsets.UTF_8);
   }
   
   private static void saveFile (File file, String text) {
     try {
       FileOutputStream out = new FileOutputStream(file);
-      out.write(text.getBytes("UTF8"));
+      out.write(text.getBytes(StandardCharsets.UTF_8));
       out.close();
     } catch (IOException ex) {
       ex.printStackTrace(System.out);
@@ -2313,6 +2312,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
       } else if ("Open Map".equals(cmd)) {
         File dir = new File(userDir + "/");
         String[] maps = dir.list((dir1, name) -> name.endsWith(".map"));
+        assert maps != null;
         for (int ii = 0; ii < maps.length; ii++) {
           maps[ii] = maps[ii].substring(0, maps[ii].length() - 4);
         }
@@ -2365,7 +2365,7 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
                   }
                 }
               }
-              BufferedImage[] mapImages = tmp.toArray(new BufferedImage[tmp.size()]);
+              BufferedImage[] mapImages = tmp.toArray(new BufferedImage[0]);
               BufferedImage mapScr = new BufferedImage(mapWidth, mapHeight, BufferedImage.TYPE_INT_RGB);
               Graphics2D g1 = (Graphics2D) mapScr.getGraphics();
               int idx = 0;
