@@ -2,9 +2,9 @@
 
 # GPSTileMap
 
-GPSTileMap is a Mapping and Mission Planning App for Small Autonomous Vehicles.  I originally wwrote it as part of my entry for the Sparkfun Autonomous Vehicle Completition (AVC) in 2013 and 2014.  Using the various tools in the toolbar, I would draw a _route_ for my vehicle to follow by clicking and dragging the mouse to place a series of _waypoints_ on the map.  Other tools allowed me to draw boundary lines and to place special markers on the map that denote various obstacles present on the course.  My vehicle, [Johhny Five](https://sites.google.com/site/wayneholder/home/johnny-five---mark-iii), used GPS for navigation, but also had various sensors for obstacle avoidance.
+GPSTileMap is a Mapping and Mission Planning App for Small Autonomous Vehicles.  I originally wrote it as part of my entry for the Sparkfun Autonomous Vehicle Completition (AVC) in 2013 and 2014.  Using the various tools in the toolbar, I would draw a _route_ for my vehicle to follow by clicking and dragging the mouse to place a series of _waypoints_ on the map.  Other tools allowed me to draw boundary lines and to place special markers on the map that denote various obstacles present on the course.  My vehicle, [Johhny Five](https://sites.google.com/site/wayneholder/home/johnny-five---mark-iii), used GPS for navigation, but also had various sensors for obstacle avoidance.
 
-Participating in the Sparkfun AVC is quite challenging, as there was only one setup, short day to get and have everything dialed in, but the flexibility of the GPSTileMap made it easy for me to program and update the route to keep up with changing conditions.  My daughter, Belle, and her cousin, Clarissa, also used the software with vehicles I helped them build.
+Participating in the Sparkfun AVC is quite challenging, as there was only one short setup day to get and have everything dialed in, but the flexibility of the GPSTileMap made it easy for me to program and update the race route to keep up with changing conditions.  My daughter, Belle, and her cousin, Clarissa, also used the software with vehicles I helped them build.
 
 ## Important
 
