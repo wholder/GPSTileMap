@@ -1795,9 +1795,10 @@ public class GPSTileMap extends JFrame implements ActionListener, Runnable {
     toolInfo.setEditable(false);
     toolInfo.setText("---");
     info.add(toolInfo);
-    JPanel topPane = new JPanel(new GridLayout(0,2));
+    JPanel topPane = new JPanel();
     topPane.add(toolBar);
-    topPane.add(info);
+    //topPane.add(info);
+    toolPanel.add(info, BorderLayout.PAGE_END);
     toolPanel.add(topPane, BorderLayout.PAGE_START);
     toolPanel.add(gpsMap = new GPSMap(this, prefs, toolInfo), BorderLayout.CENTER);
     toolBar.registerGPSMap(gpsMap);
