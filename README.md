@@ -8,7 +8,7 @@ Participating in the Sparkfun AVC is quite challenging, as there was only one se
 
 ## Important
 
-GPSTileMap uses the Google Static Maps API as it's sourece of images, which means that you have to have a valid "key" from Google to use this API.  Use **Options->Edit Map Key** to enter this key.
+GPSTileMap uses the Google Static Maps API as it's sourece of images, which means that you have to have a valid "key" from Google to use this API.  Use **Options->Edit Map Key** to enter this key.  See [Google Static Maps API](https://developers.google.com/maps/documentation/maps-static/intro) for more details on how to obtain this key.
 
 ## Credit and Thanks
 
